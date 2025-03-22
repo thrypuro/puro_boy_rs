@@ -1,6 +1,10 @@
-use sdl2::{pixels::Color, rect::Rect, render::Canvas, video::Window, EventPump};
-mod cpu;
+#![crate_name = "puro_boy"]
+
+mod gb;
 
 fn main() {
-    let cp = cpu::cpu::new();
+    let c = gb::cpu::cpu::new();
+    println!("Hello world!");
+    println!("A: {}", c.clock);
 }
+ 
