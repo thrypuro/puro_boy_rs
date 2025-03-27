@@ -1,21 +1,20 @@
 
-struct memory {
+pub struct Memory {
     ram : [u8; 0xFFFF],
 }
 
-
-impl memory {
+impl Memory {
     
-     fn new() -> memory {
-        memory {
+     pub fn new() -> Memory {
+        Memory {
             ram: [0; 0xFFFF],
         }
     }
-    fn read_byte(&self, address: u16) -> u8 {
+    pub fn read_byte(&self, address: u16) -> u8 {
         self.ram[address as usize]
     }
 
-    fn write_byte(&mut self, address: u16, value: u8) {
+    pub fn write_byte(&mut self, address: u16, value: u8) {
         self.ram[address as usize] = value;
     }
 }
