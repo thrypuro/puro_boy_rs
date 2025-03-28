@@ -3,7 +3,6 @@
 mod gb;
 
 fn main() {
-    let c = gb::cpu::CPU::new();
     println!("Hello world!");
     // println!("A: {}", c);
 }

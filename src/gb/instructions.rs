@@ -1,23 +1,26 @@
 use crate::gb::registers::{Registers, RegisterNames};
-use crate::gb::mmu::Memory;
+use crate::gb::mmu::MMU;
 /// Represents an operand, which can be a register or a memory address.
 pub enum Operand {
     Register(RegisterNames),
     Memory(u16), // Memory address
+    Immediate(u8), // Immediate value
 }
 
 impl Operand {
-    pub fn read(&self, registers: &Registers, memory: &Memory) -> u8 {
+    pub fn read(&self, registers: &Registers, memory: &MMU) -> u8 {
         match self {
             Operand::Register(reg) => registers.get_register_value_8(*reg),
-            Operand::Memory(addr) => memory.read_byte(*addr),
+            Operand::Memory(addr) => memory.read(*addr),
+            Operand::Immediate(value) => *value,
         }
     }
 
-    pub fn write(&self, value: u8, registers: &mut Registers, memory: &mut Memory) {
+    pub fn write(&self, value: u8, registers: &mut Registers, memory: &mut MMU) {
         match self {
             Operand::Register(reg) => registers.set_register_value_8(*reg, value),
-            Operand::Memory(addr) => memory.write_byte(*addr, value),
+            Operand::Memory(addr) => memory.write(*addr, value),
+            Operand::Immediate(_) => panic!("Cannot write to an immediate value"),
         }
     }
     pub fn write_u16(&self, value: u16, registers: &mut Registers) {
@@ -26,8 +29,7 @@ impl Operand {
             Operand::Register(RegisterNames::BC) => registers.bc = value,
             Operand::Register(RegisterNames::DE) => registers.de = value,
             Operand::Register(RegisterNames::HL) => registers.hl = value,
-            Operand::Register(RegisterNames::SP) => registers.sp = value,
-            Operand::Register(RegisterNames::PC) => registers.pc = value,
+
             _ => panic!("Invalid register for 16-bit write"),
         }
     }
@@ -37,176 +39,372 @@ impl Operand {
             Operand::Register(RegisterNames::BC) => registers.bc,
             Operand::Register(RegisterNames::DE) => registers.de,
             Operand::Register(RegisterNames::HL) => registers.hl,
-            Operand::Register(RegisterNames::SP) => registers.sp,
-            Operand::Register(RegisterNames::PC) => registers.pc,
             _ => panic!("Invalid register for 16-bit read"),
         }
     }
 }
 
-/// Trait for all instructions.
-pub trait Instruction {
-    fn execute(&self, registers: &mut Registers, memory: &mut Memory);
+
+pub fn add_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let result = value1.wrapping_add(value2);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = ((value1 & 0x0F) + (value2 & 0x0F)) > 0x0F;
+    registers.flag.c = (value1 as u16 + value2 as u16) > 0xFF;
+
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
+}
+pub fn add_16bit(
+    registers: &mut Registers,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read_16(registers);
+    let value2 = operand2.read_16(registers);
+    let result = value1.wrapping_add(value2);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = ((value1 & 0x0FFF) + (value2 & 0x0FFF)) > 0x0FFF;
+    registers.flag.c = (value1 as u32 + value2 as u32) > 0xFFFF;
+
+    // Write result back to the first operand
+    operand1.write_u16(result, registers);
 }
 
-// Macro for defining arithmetic instructions.
-macro_rules! define_arithmetic_instruction {
-    ($name:ident, $operation:expr) => {
-        pub struct $name {
-            op1: Operand,
-            op2: Operand,
-        }
+pub fn sub_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let result = value1.wrapping_sub(value2);
 
-        impl $name {
-            pub fn new(op1: Operand, op2: Operand) -> Self {
-                Self { op1, op2 }
-            }
-        }
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = true;
+    registers.flag.h = (value1 & 0x0F) < (value2 & 0x0F);
+    registers.flag.c = (value1 as u16) < (value2 as u16);
 
-        impl Instruction for $name {
-            fn execute(&self, registers: &mut Registers, memory: &mut Memory) {
-                let value1 = self.op1.read(registers, memory);
-                let value2 = self.op2.read(registers, memory);
-                let result = $operation(value1, value2);
-
-                self.op1.write(result, registers, memory);
-                // registers.update_flags(value1, value2, result);
-                registers.pc += 1;
-            }
-        }
-    };
-}
-// Define Add, Sub, And, Or, Xor, Cp instructions
-define_arithmetic_instruction!(Add, |a : u8 , b : u8| a.wrapping_add(b));
-define_arithmetic_instruction!(Sub, |a : u8, b : u8| a.wrapping_sub(b));
-
-define_arithmetic_instruction!(And, |a : u8 , b : u8| a & b);
-define_arithmetic_instruction!(Or, |a : u8 , b : u8| a | b);
-define_arithmetic_instruction!(Xor, |a : u8 , b : u8| a ^ b);
-
-// Define Inc, Dec 
-define_arithmetic_instruction!(Inc, |a : u8 , _| a.wrapping_add(1));
-define_arithmetic_instruction!(Dec, |a : u8, _| a.wrapping_sub(1));
-
-
-// Nop instruction: Does nothing but increments the program counter.
-pub struct Nop;
-
-    impl Instruction for Nop {
-        fn execute(&self, registers: &mut Registers, _memory: &mut Memory) {
-            registers.pc += 1;
-        }
-    }
-
-// Load instruction: Loads a value into a register or memory address.
-pub struct Load {
-    op1: Operand,
-    op2: Operand,
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
 }
 
-impl Load {
-    pub fn new(op1: Operand, op2: Operand) -> Self {
-        Self { op1, op2 }
-    }
-}
+pub fn sub_16bit(
+    registers: &mut Registers,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read_16(registers);
+    let value2 = operand2.read_16(registers);
+    let result = value1.wrapping_sub(value2);
 
-impl Instruction for Load {
-    fn execute(&self, registers: &mut Registers, memory: &mut Memory) {
-        let value = self.op2.read(registers, memory);
-        self.op1.write(value, registers, memory);
-        registers.pc += 1;
-    }
-}
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = true;
+    registers.flag.h = (value1 & 0x0FFF) < (value2 & 0x0FFF);
+    registers.flag.c = (value1 as u32) < (value2 as u32);
 
-// The Xor instruction is already defined using the macro.
-
-// cp instruction: Compares two operands by subtracting the second operand from the first operand, but does not store the result.
-
-pub struct Cp {
-    op1: Operand,
-    op2: Operand,
-}
-
-impl Cp {
-    pub fn new(op1: Operand, op2: Operand) -> Self {
-        Self { op1, op2 }
-    }
-}
-
-impl Instruction for Cp {
-    fn execute(&self, registers: &mut Registers, memory: &mut Memory) {
-        let value1 = self.op1.read(registers, memory);
-        let value2 = self.op2.read(registers, memory);
-
-        let result = value1.wrapping_sub(value2);
-
-        // registers.update_flags(value1, value2, result);
-        registers.pc += 1;
-    }
-}
-
-// push instruction: Pushes a value onto the stack.
-
-pub struct Push {
-    op: Operand,
-}
-
-impl Push {
-    pub fn new(op: Operand) -> Self {
-        Self { op }
-    }
-}
-
-impl Instruction for Push {
-    fn execute(&self, registers: &mut Registers, memory: &mut Memory) {
-        let value = self.op.read(registers, memory);
-
-        registers.sp -= 1;
-        memory.write_byte(registers.sp, value);
-        registers.pc += 1;
-    }
-}
-// Pop instruction: Pops a value from the stack.
-
-pub struct Pop {
-    op: Operand,
-}
-
-impl Pop {
-    pub fn new(op: Operand) -> Self {
-        Self { op }
-    }
-}
-
-impl Instruction for Pop {
-    fn execute(&self, registers: &mut Registers, memory: &mut Memory) {
-        let value = memory.read_byte(registers.sp);
-        registers.sp += 1;
-        self.op.write(value, registers, memory);
-        registers.pc += 1;
-    }
+    // Write result back to the first operand
+    operand1.write_u16(result, registers);
 }
 
 
-// call instruction: Calls a subroutine at the specified memory address.
+pub fn and_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let result = value1 & value2;
 
-pub struct Call {
-    addr: u16,
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = true;
+    registers.flag.c = false;
+
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
 }
 
-impl Call {
-    pub fn new(addr: u16) -> Self {
-        Self { addr }
-    }
+pub fn or_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let result = value1 | value2;
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = false;
+
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
 }
 
-impl Instruction for Call {
-    fn execute(&self, registers: &mut Registers, memory: &mut Memory) {
-        // Push the return address onto the stack
-        let return_addr = registers.pc + 3;
-        registers.sp -= 2;
-        memory.write_byte(registers.sp, (return_addr >> 8) as u8);
-        memory.write_byte(registers.sp + 1, (return_addr & 0xFF) as u8);
-        registers.pc = self.addr;
-    }
+pub fn xor_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let result = value1 ^ value2;
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = false;
+
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
+}
+pub fn cp_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let result = value1.wrapping_sub(value2);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = true;
+    registers.flag.h = (value1 & 0x0F) < (value2 & 0x0F);
+    registers.flag.c = (value1 as u16) < (value2 as u16);
+}
+
+pub fn ld_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value = operand2.read(registers, memory);
+    operand1.write(value, registers, memory);
+}
+
+pub fn ld_16bit(
+    registers: &mut Registers,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value = operand2.read_16(registers);
+    operand1.write_u16(value, registers);
+}
+
+// rlc : rotate left circular
+pub fn rlc(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = (value << 1) | (value >> 7);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x80) != 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+pub fn rrc (
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = (value >> 1) | (value << 7);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x01) != 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+pub fn rl (
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let carry = registers.flag.c as u8;
+    let result = (value << 1) | carry;
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x80) != 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+pub fn rr (
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let carry = registers.flag.c as u8;
+    let result = (value >> 1) | (carry << 7);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x01) != 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+// shift left arithmetic
+pub fn sla(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = value << 1;
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x80) != 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+// shift right arithmetic
+pub fn sra(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = (value >> 1) | (value & 0x80);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x01) != 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+// Swap nibbles
+pub fn swap(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = (value << 4) | (value >> 4);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = false;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+// Bit test
+pub fn bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+    bit: u8,
+) {
+    let value = operand.read(registers, memory);
+    let result = value & (1 << bit);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = true;
+    registers.flag.c = false;
+}
+
+// Bit set
+pub fn set(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+    bit: u8,
+) {
+    let value = operand.read(registers, memory);
+    let result = value | (1 << bit);
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+// Bit reset
+pub fn res(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+    bit: u8,
+) {
+    let value = operand.read(registers, memory);
+    let result = value & !(1 << bit);
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+
+
+// Control flow instructions
+
+pub fn jp(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    mut pc : u16,
+    operand: Operand,
+    
+) {
+    let address = operand.read_16(registers);
+    pc = address;
 }
