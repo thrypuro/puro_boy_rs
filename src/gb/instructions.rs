@@ -5,6 +5,7 @@ pub enum Operand {
     Register(RegisterNames),
     Memory(u16), // Memory address
     Immediate(u8), // Immediate value
+    Immediate16(u16), // 16-bit immediate value
 }
 
 impl Operand {
@@ -13,6 +14,7 @@ impl Operand {
             Operand::Register(reg) => registers.get_register_value_8(*reg),
             Operand::Memory(addr) => memory.read(*addr),
             Operand::Immediate(value) => *value,
+            _ => panic!("Invalid operand for read"),
         }
     }
 
@@ -20,7 +22,8 @@ impl Operand {
         match self {
             Operand::Register(reg) => registers.set_register_value_8(*reg, value),
             Operand::Memory(addr) => memory.write(*addr, value),
-            Operand::Immediate(_) => panic!("Cannot write to an immediate value"),
+            _ => panic!("Invalid operand for write"),
+            
         }
     }
     pub fn write_u16(&self, value: u16, registers: &mut Registers) {
@@ -39,6 +42,7 @@ impl Operand {
             Operand::Register(RegisterNames::BC) => registers.bc,
             Operand::Register(RegisterNames::DE) => registers.de,
             Operand::Register(RegisterNames::HL) => registers.hl,
+            Operand::Immediate16(value) => *value,
             _ => panic!("Invalid register for 16-bit read"),
         }
     }
@@ -64,6 +68,30 @@ pub fn add_8bit(
     // Write result back to the first operand
     operand1.write(result, registers, memory);
 }
+
+
+pub fn adc_8bit (
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let carry = if registers.flag.c { 1 } else { 0 };
+    let result = value1.wrapping_add(value2).wrapping_add(carry);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = ((value1 & 0x0F) + (value2 & 0x0F) + carry) > 0x0F;
+    registers.flag.c = (value1 as u16 + value2 as u16 + carry as u16) > 0xFF;
+
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
+}
+
+
 pub fn add_16bit(
     registers: &mut Registers,
     operand1: Operand,
@@ -98,6 +126,27 @@ pub fn sub_8bit(
     registers.flag.n = true;
     registers.flag.h = (value1 & 0x0F) < (value2 & 0x0F);
     registers.flag.c = (value1 as u16) < (value2 as u16);
+
+    // Write result back to the first operand
+    operand1.write(result, registers, memory);
+}
+
+pub fn sbc_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand1: Operand,
+    operand2: Operand,
+) {
+    let value1 = operand1.read(registers, memory);
+    let value2 = operand2.read(registers, memory);
+    let carry = if registers.flag.c { 1 } else { 0 };
+    let result = value1.wrapping_sub(value2).wrapping_sub(carry);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = true;
+    registers.flag.h = (value1 & 0x0F) < (value2 & 0x0F) + carry;
+    registers.flag.c = (value1 as u16) < (value2 as u16) + carry as u16;
 
     // Write result back to the first operand
     operand1.write(result, registers, memory);
@@ -401,10 +450,135 @@ pub fn res(
 pub fn jp(
     registers: &mut Registers,
     memory: &mut MMU,
-    mut pc : u16,
+    pc : &mut u16,
     operand: Operand,
-    
+    condition: bool,
+
 ) {
-    let address = operand.read_16(registers);
-    pc = address;
+    if condition {
+        let address = operand.read_16(registers);
+        *pc = address;
+    }
 }
+
+pub fn call(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    pc : &mut u16,
+    sp : &mut u16,
+    operand: Operand,
+    condition: bool,
+
+) {
+    if condition {
+        let address = operand.read_16(registers);
+        *sp = sp.wrapping_sub(2);
+        memory.write_word(*sp, *pc);
+        *pc = address;
+    }
+}
+
+pub fn jr(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    pc : &mut  u16,
+    operand: Operand,
+) {
+    let offset = operand.read(registers, memory) as i8;
+    pc.wrapping_add(offset as u16);
+}
+
+
+pub fn jr_conditional(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    pc : &mut u16,
+    condition: bool,
+    operand: Operand,
+) {
+    if condition {
+        let offset = operand.read(registers, memory) as i8;
+        *pc = pc.wrapping_add(offset as u16);
+    }
+}
+
+
+pub fn ret(
+    _registers: &mut Registers,
+    memory: &mut MMU,
+    pc : &mut u16,
+    sp : &mut u16,
+    cond : bool,
+) {
+
+    // Pop the address from the stack and set it as the new program counter
+    if cond {
+        let low = memory.read(*sp);
+        let high = memory.read(*sp + 1);
+        *pc = ((high as u16) << 8) | (low as u16);
+        *sp = sp.wrapping_add(2);
+    }
+    
+
+}
+
+
+
+pub fn daa(
+    registers: &mut Registers,) 
+    {
+    let mut a = registers.af >> 8;
+    a &= 0xFF; // Ensure a is 8 bits
+    let mut carry = 0;
+
+    if registers.flag.n {
+        if registers.flag.c {
+            a = a.wrapping_sub(0x60);
+            carry = 1;
+        }
+        if registers.flag.h {
+            a = a.wrapping_sub(0x06);
+            carry = 1;
+        }
+    } else {
+        if registers.flag.c || a > 0x99 {
+            a = a.wrapping_add(0x60);
+            carry = 1;
+        }
+        if registers.flag.h || (a & 0x0F) > 0x09 {
+            a = a.wrapping_add(0x06);
+            carry = 1;
+        }
+    }
+
+    registers.af = (registers.af & 0xFF00) | (a << 8);
+    registers.flag.z = a == 0;
+    registers.flag.h = false;
+    registers.flag.c = carry != 0;
+}
+
+
+pub fn cpl(
+    registers: &mut Registers,
+) {
+    let a = registers.af >> 8;
+    registers.af = (registers.af & 0xFF00) | (!a << 8);
+    registers.flag.n = true;
+    registers.flag.h = true;
+}
+pub fn scf(
+    registers: &mut Registers,
+) {
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = true;
+}
+pub fn ccf(
+    registers: &mut Registers,
+) {
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = !registers.flag.c;
+}
+
+
