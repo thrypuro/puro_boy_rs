@@ -1,12 +1,17 @@
 use crate::gb::registers::{Registers, RegisterNames};
 use crate::gb::mmu::MMU;
 /// Represents an operand, which can be a register or a memory address.
+
+#[derive(Debug)]
 pub enum Operand {
     Register(RegisterNames),
     Memory(u16), // Memory address
     Immediate(u8), // Immediate value
     Immediate16(u16), // 16-bit immediate value
 }
+
+
+// get operand bit length 
 
 impl Operand {
     pub fn read(&self, registers: &Registers, memory: &MMU) -> u8 {
@@ -46,7 +51,33 @@ impl Operand {
             _ => panic!("Invalid register for 16-bit read"),
         }
     }
+    pub fn get_bit_length(&self) -> u8 {
+        match self {
+            Operand::Register(a) => match a {
+                RegisterNames::A => 8,
+                RegisterNames::B => 8,
+                RegisterNames::C => 8,
+                RegisterNames::D => 8,
+                RegisterNames::E => 8,
+                RegisterNames::H => 8,
+                RegisterNames::L => 8,
+                RegisterNames::AF => 16,
+                RegisterNames::BC => 16,
+                RegisterNames::DE => 16,
+                RegisterNames::HL => 16,
+                RegisterNames::SP => 16,
+                RegisterNames::PC => 16,
+
+            },
+            Operand::Memory(_) => 8,
+            Operand::Immediate(_) => 8,
+            Operand::Immediate16(_) => 16,
+        }
+        
+    }
 }
+
+
 
 
 pub fn add_8bit(

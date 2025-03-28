@@ -2,6 +2,7 @@ use core::panic;
 
 #[derive(Copy, Clone)]
 #[allow(dead_code)]
+#[derive(Debug)]
 pub enum RegisterNames {
     A,
     B,
@@ -14,6 +15,8 @@ pub enum RegisterNames {
     BC,
     DE,
     HL,
+    SP,
+    PC,
 
 }
 pub struct Flag {
@@ -80,6 +83,8 @@ pub struct Registers {
     pub bc: u16,
     pub de: u16,
     pub hl: u16,
+    pub sp: u16,
+    pub pc: u16,
     pub flag: Flag,
 }
 
@@ -93,6 +98,8 @@ impl Registers {
             bc: 0,
             de: 0,
             hl: 0,
+            sp : 0xFFFE,
+            pc : 0x0,
             flag: Flag {
                 z: false,
                 n: false,
@@ -186,4 +193,51 @@ impl Registers {
 
 }
 
+
+pub fn match_string_to_register(reg : &str) -> RegisterNames {
+    // match the register to the enum
+    match reg {
+        "A" => RegisterNames::A,
+        "B" => RegisterNames::B,
+        "C" => RegisterNames::C,
+        "D" => RegisterNames::D,
+        "E" => RegisterNames::E,
+        "H" => RegisterNames::H,
+        "L" => RegisterNames::L,
+        _   => match_string_to_register16(reg)
+    }
+}
+fn match_string_to_register16(reg : &str) -> RegisterNames {
+    // match the register to the enum
+    match reg {
+        "AF" => RegisterNames::AF,
+        "BC" => RegisterNames::BC,
+        "DE" => RegisterNames::DE,
+        "HL" => RegisterNames::HL,
+        "SP" => RegisterNames::SP,
+        "PC" => RegisterNames::PC,
+        _   => panic!("Unknown register: {}", reg),
+    }
+}
+
+// get register size 
+pub fn get_register_bit_length(re : RegisterNames) -> u8 {
+    match re {
+        RegisterNames::A => 8,
+        RegisterNames::B => 8,
+        RegisterNames::C => 8,
+        RegisterNames::D => 8,
+        RegisterNames::E => 8,
+        RegisterNames::H => 8,
+        RegisterNames::L => 8,
+        RegisterNames::AF => 16,
+        RegisterNames::BC => 16,
+        RegisterNames::DE => 16,
+        RegisterNames::HL => 16,
+        RegisterNames::SP => 16,
+        RegisterNames::PC => 16,
+
+        _   => panic!("Unknown register"),
+    }
+}
 
