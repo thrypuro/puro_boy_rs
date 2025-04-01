@@ -78,6 +78,70 @@ impl Operand {
 }
 
 
+pub fn inc_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = value.wrapping_add(1);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = (value & 0x0F) == 0x0F;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+pub fn dec_8bit(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read(registers, memory);
+    let result = value.wrapping_sub(1);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = true;
+    registers.flag.h = (value & 0x0F) == 0;
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+pub fn inc_16bit(
+    registers: &mut Registers,
+    operand: Operand,
+) {
+    let value = operand.read_16(registers);
+    let result = value.wrapping_add(1);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = (value & 0x0FFF) == 0x0FFF;
+
+    // Write result back to the operand
+    operand.write_u16(result, registers);
+}
+
+pub fn dec_16bit(
+    registers: &mut Registers,
+    operand: Operand,
+) {
+    let value = operand.read_16(registers);
+    let result = value.wrapping_sub(1);
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = true;
+    registers.flag.h = (value & 0x0FFF) == 0;
+
+    // Write result back to the operand
+    operand.write_u16(result, registers);
+}
 
 
 pub fn add_8bit(
@@ -613,3 +677,24 @@ pub fn ccf(
 }
 
 
+pub fn push(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let value = operand.read_16(registers);
+    let sp = &mut registers.sp;
+    *sp = sp.wrapping_sub(2);
+    memory.write_word(*sp, value);
+}
+
+pub fn pop(
+    registers: &mut Registers,
+    memory: &mut MMU,
+    operand: Operand,
+) {
+    let sp = &mut registers.sp;
+    let value = memory.read_word(*sp);
+    *sp = sp.wrapping_add(2);
+    operand.write_u16(value, registers);
+}

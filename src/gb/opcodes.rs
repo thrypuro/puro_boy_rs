@@ -1,6 +1,18 @@
 use json;
 #[derive(Debug)]
 pub enum Instruction {
+    // Single byte instructions
+    NOP,
+    RRCA,
+    INC,
+    DEC,
+    RLCA,
+    RLA,
+    RRA,
+    PUSH,
+    POP,
+
+    // Logical instructions
     ADD,
     ADC,
     SUB,
@@ -8,19 +20,18 @@ pub enum Instruction {
     AND,
     OR,
     XOR,
+    LD,
+
+    
+    // Bit manipulation instructions
     CP,
     DAA,
     CPL,
     SCF,
     CCF,
-    LD,
-    NOP,
-    INC,
-    DEC,
-    RLCA,
-    RLA,
-    RRCA,
-    RRA,
+    
+    
+    
 }
 
 pub fn get_opcodes() -> json::JsonValue {
@@ -50,6 +61,14 @@ pub fn match_string_to_instruction(instr : &str) -> Instruction {
         "INC" => Instruction::INC,
         "DEC" => Instruction::DEC,
         "LD"  => Instruction::LD,
+        "RRCA" => Instruction::RRCA,
+        "RLA" => Instruction::RLA,
+        "RRA" => Instruction::RRA,
+        "RLCA" => Instruction::RLCA,
+        "PUSH" => Instruction::PUSH,
+        "POP" => Instruction::POP,
+        
+
         _     => panic!("Unknown instruction: {}", instr),
     }
 }
