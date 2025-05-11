@@ -99,7 +99,7 @@ impl Registers {
             de: 0,
             hl: 0,
             sp : 0xFFFE,
-            pc : 0x0,
+            pc : 0x100,
             flag: Flag {
                 z: false,
                 n: false,
@@ -138,7 +138,7 @@ impl Registers {
             RegisterNames::BC => self.bc,
             RegisterNames::DE => self.de,
             RegisterNames::HL => self.hl,
-
+            RegisterNames::SP => self.sp,
             _ => panic!("Invalid register"),
         }
     }
@@ -216,6 +216,7 @@ fn match_string_to_register16(reg : &str) -> RegisterNames {
         "HL" => RegisterNames::HL,
         "SP" => RegisterNames::SP,
         "PC" => RegisterNames::PC,
+
         _   => panic!("Unknown register: {}", reg),
     }
 }

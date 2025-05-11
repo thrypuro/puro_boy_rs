@@ -47,6 +47,7 @@ impl Operand {
             Operand::Register(RegisterNames::BC) => registers.bc,
             Operand::Register(RegisterNames::DE) => registers.de,
             Operand::Register(RegisterNames::HL) => registers.hl,
+            Operand::Register(RegisterNames::SP) => registers.sp,
             Operand::Immediate16(value) => *value,
             _ => panic!("Invalid register for 16-bit read"),
         }
@@ -545,13 +546,14 @@ pub fn res(
 pub fn jp(
     registers: &mut Registers,
     memory: &mut MMU,
-    pc : &mut u16,
     operand: Operand,
     condition: bool,
 
 ) {
     if condition {
+
         let address = operand.read_16(registers);
+        let pc = &mut registers.pc;
         *pc = address;
     }
 }
@@ -559,14 +561,14 @@ pub fn jp(
 pub fn call(
     registers: &mut Registers,
     memory: &mut MMU,
-    pc : &mut u16,
-    sp : &mut u16,
     operand: Operand,
     condition: bool,
 
 ) {
     if condition {
         let address = operand.read_16(registers);
+        let pc = &mut registers.pc;
+        let sp = &mut registers.sp;
         *sp = sp.wrapping_sub(2);
         memory.write_word(*sp, *pc);
         *pc = address;
@@ -576,40 +578,42 @@ pub fn call(
 pub fn jr(
     registers: &mut Registers,
     memory: &mut MMU,
-    pc : &mut  u16,
+
     operand: Operand,
 ) {
     let offset = operand.read(registers, memory) as i8;
-    pc.wrapping_add(offset as u16);
+    let pc = &mut registers.pc;
+    *pc = pc.wrapping_add(offset as u16);
+
 }
 
 
 pub fn jr_conditional(
     registers: &mut Registers,
     memory: &mut MMU,
-    pc : &mut u16,
     condition: bool,
     operand: Operand,
 ) {
     if condition {
         let offset = operand.read(registers, memory) as i8;
+        let pc = &mut registers.pc;
         *pc = pc.wrapping_add(offset as u16);
     }
 }
 
 
 pub fn ret(
-    _registers: &mut Registers,
+    registers: &mut Registers,
     memory: &mut MMU,
-    pc : &mut u16,
-    sp : &mut u16,
     cond : bool,
 ) {
 
     // Pop the address from the stack and set it as the new program counter
     if cond {
+        let sp = &mut registers.sp;
         let low = memory.read(*sp);
         let high = memory.read(*sp + 1);
+        let pc = &mut registers.pc;
         *pc = ((high as u16) << 8) | (low as u16);
         *sp = sp.wrapping_add(2);
     }

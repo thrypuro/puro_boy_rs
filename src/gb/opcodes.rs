@@ -30,7 +30,15 @@ pub enum Instruction {
     SCF,
     CCF,
     
-    
+    // Control flow instructions
+    JP,
+    JR,
+    CALL,
+    RET,
+    RETI,
+    RST,
+    // Other instructions
+
     
 }
 

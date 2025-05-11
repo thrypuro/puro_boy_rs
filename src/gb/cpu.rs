@@ -1,18 +1,15 @@
 use crate::gb::instructions::*;
-use crate::gb::registers::{Registers, RegisterNames,match_string_to_register,get_register_bit_length};
+use crate::gb::registers::{Registers, RegisterNames,match_string_to_register};
 use crate::gb::mmu::MMU;
 use json;
-use super::registers;
 use crate::gb::opcodes::{get_opcodes, Instruction, match_string_to_instruction};
 
 
-
-const deb : bool = true;
+const DEB : bool = true;
 
 pub struct CPU {
     registers: Registers,
     memory: MMU,
-
     halted : bool,
     opcodes : json::JsonValue,
 }
@@ -27,21 +24,50 @@ impl CPU {
             opcodes : get_opcodes(),
         }
     }
-    
-    // POP 
-    fn pop(&mut self) -> u16 {
-        let low = self.memory.read(self.registers.sp);
-        let high = self.memory.read(self.registers.sp + 1);
-        self.registers.sp += 2;
-        ((high as u16) << 8) | (low as u16)
+
+    fn execute_two_operand<F,T>(
+        &mut self,
+        operand1: Operand,
+        operand2: Operand,
+        operation: F,
+        operation2: T,
+    ) where
+        F: Fn(&mut Registers, &mut MMU,Operand, Operand),
+        T: Fn(&mut Registers,Operand, Operand)
+    {   
+        let blen = operand1.get_bit_length();
+        let blen2 = operand2.get_bit_length();
+        if blen == 16  {
+            operation2(&mut self.registers, operand1,operand2)
+        }
+        else if blen == 8 {
+            operation(&mut self.registers, &mut self.memory,operand1,operand2);
+        }
+        else {
+            panic!("Invalid bit length");
+        }
     }
-    
-    // PUSH 
-    fn push(&mut self, value: u16) {
-        self.registers.sp -= 2;
-        self.memory.write(self.registers.sp, (value & 0x00FF) as u8);
-        self.memory.write(self.registers.sp + 1, ((value >> 8) & 0x00FF) as u8);
-    }
+
+    fn execute_one_operand<F,T> (
+        &mut self,
+        operand1: Operand,
+        operation: F,
+        operation2: T,
+    ) where
+    F: Fn(&mut Registers, &mut MMU,Operand),
+    T: Fn(&mut Registers,Operand)    
+    {
+    let blen = operand1.get_bit_length();
+            if blen == 16 {
+                operation2(&mut self.registers, operand1)
+            }
+            else if blen == 8 {
+                operation(&mut self.registers, &mut self.memory,operand1);
+            }
+            else {
+                panic!("Invalid bit length");
+            }
+        }
 
     // readw word from rom
     fn read_word(&mut self) -> u16 {
@@ -65,11 +91,20 @@ impl CPU {
 
         // Fetch the opcode from memory
         let opcode = self.read_byte();
+        
+        println!("Opcode : {:02X}",opcode);
         // Execute the instruction
         self.execute_instruction(opcode);
+        self.registers.pc +=1;
     }
 
-    fn get_operand(&self, operand : &str, op_im : bool) -> Operand {
+    fn get_operand(&mut self, operand : &str, op_im : bool) -> Operand {
+
+        if operand.contains("a16"){
+            let value = self.read_word();
+            Operand::Memory(value)
+        }
+        else {
         // get the immediate value
         let op_reg = match_string_to_register(operand);
         
@@ -79,6 +114,7 @@ impl CPU {
             let value = self.registers.get_register_value_16(op_reg);
             Operand::Memory(value)
         }
+    }
     }
     
     fn execute_instruction(&mut self, op : u8) {
@@ -91,8 +127,7 @@ impl CPU {
         let instr = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
 
         let operands = &a["operands"];
-
-
+    
         if operands.len() == 2 {
             // get the first operand
             let op1 = &operands[0]["name"].as_str().unwrap();
@@ -102,8 +137,7 @@ impl CPU {
             // get the immediate value
             let op2_imm : bool = operands[1]["immediate"].as_bool().unwrap();
             let imm : bool = operands[1]["immediate"].as_bool().unwrap();
-            
-    
+
             // if op1_imm is true, then it is an immediate value
             // let operand1 = Operand::Register(match_string_to_register(op1));
             let operand1 =  self.get_operand(op1, op1_imm);
@@ -127,59 +161,41 @@ impl CPU {
                     self.get_operand(op2, op2_imm)
                 }
             };
-
-            if deb {
-                // println!("---------------DEBUG------------------------");
-                // println!("Instructions: {:?}", instr);
-                // println!("Operand 1: {:?}", operand1);
-                // println!("Operand 2: {:?}", operand2);
-                // println!("Immediate: {:?}", imm);
+            if DEB {
                 println!("{:?} {:?},{:?} \n", instr, operand1, operand2);
-                // println!("-------------------------------------------");
-
             }
             match instr {
                 Instruction::ADD => {
                     // ADD instruction
-                    // self.registers.add(operand1, operand2);
-                    let bit_len = operand1.get_bit_length();
-                    if bit_len == 8 {
-                        // 8 bit add
-                        // self.registers.add_8bit(operand1, operand2);
-                        add_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
-                    } else if bit_len == 16 {
-                        // 16 bit add
-                        // self.registers.add_16bit(operand1, operand2);
-                        add_16bit(&mut self.registers, operand1, operand2);
-                    } else {
-                        panic!("Invalid operand size");
-                    }
-
+                    self.execute_two_operand(operand1, operand2, add_8bit, add_16bit);
+                }
+                Instruction::ADC => {
+                    // ADC instruction 
+                    adc_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
                 }
                 Instruction::SUB => {
                     // SUB instruction
-                    // self.registers.sub(operand1, operand2);
                     sub_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
                 }
-               
-                
                 Instruction::LD => {
-                    
-                    // LD instruction
-                    let bit_len = operand1.get_bit_length();
-                    if bit_len == 8 {
-                        // 8 bit load
-                        ld_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
-                    } else if bit_len == 16 {
-                        // 16 bit load
-                        // self.registers.ld(operand1, operand2);
-                        ld_16bit(&mut self.registers, operand1, operand2);
-                    } else {
-                        panic!("Invalid operand size");
-                    }
+                    self.execute_two_operand(operand1, operand2, ld_8bit, ld_16bit);
                 }
-            
-
+                Instruction::AND => {
+                    // AND instruction
+                    and_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
+                }
+                Instruction::OR => {
+                    // OR instruction
+                    or_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
+                }
+                Instruction::XOR => {
+                    // XOR instruction
+                    xor_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
+                }
+                Instruction::CP => {
+                    // CP instruction
+                    cp_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
+                }
                 _ => {
                     panic!("Unknown instruction: {:?}", instr);
                 }
@@ -197,25 +213,15 @@ impl CPU {
 
             // imm 
             let imm : bool = operands[0]["immediate"].as_bool().unwrap();
-
-
-            if deb {
-                // println!("---------------DEBUG------------------------");
-                // println!("Instructions: {:?}", instr);
-                // println!("Operand 1: {:?}", operand1);
-                // println!("Immediate: {:?}", imm);
-                // println!("Instruction: {:?}", instr);
-                // print the instruction
+            if DEB {
                 println!("{:?} {:?} \n", instr, operand1);
-
-
             }
 
+            
             match instr {
-               
+                            
                 Instruction::INC => {
                     // INC instruction
-                    // print bit length
                     let bit_len = operand1.get_bit_length();
                    
                     if bit_len == 8 {
@@ -254,8 +260,11 @@ impl CPU {
                     pop( &mut self.registers, &mut self.memory, operand1);
                 }
 
+                Instruction::JP => {
+                    // JP instruction
+                    jp(&mut self.registers, &mut self.memory, operand1 , true);
+                }
 
-                
                 _ => {
                     panic!("Unknown instruction: {:?}", instr);
                 }
@@ -265,7 +274,9 @@ impl CPU {
             
         }
         else if operands.len() == 0 {
-
+            if DEB {
+                println!("{:?} \n", instr);
+                } 
             match instr {
                 Instruction::NOP => {
                     // NOP instruction
@@ -290,6 +301,32 @@ impl CPU {
                     // RLA instruction
                     // self.registers.rla();
                     rl(&mut self.registers, &mut self.memory , Operand::Register(RegisterNames::A));
+                },
+                Instruction::CPL => {
+                    // CPL instruction
+                    cpl(&mut self.registers);
+                }
+                Instruction::DAA => {
+                    // DAA instruction
+                    // self.registers.daa();
+                    daa(&mut self.registers);
+                }
+
+                Instruction::SCF => {
+                    // SCF instruction
+                    // self.registers.scf();
+                    scf(&mut self.registers);
+                }
+                Instruction::CCF => {
+                    // CCF instruction
+                    // self.registers.ccf();
+                    ccf(&mut self.registers);
+                }
+                
+                Instruction::RET => {
+                    // RET instruction
+                    // self.registers.ret();
+                    ret(&mut self.registers, &mut self.memory, true);
                 }
             
                 _ => {
@@ -305,6 +342,9 @@ impl CPU {
     }
 
 }
+
+
+// tests 
 
 #[cfg(test)]
 mod tests {
@@ -377,6 +417,24 @@ mod tests {
         // Test pop
         cpu.execute_instruction(0xF1); // POP AF instruction
         assert_eq!(cpu.registers.get_register_value_16(RegisterNames::AF), 0x1234);
+    }
+    // test add and if carry flag is set
+    #[test]
+    fn test_add_carry_flag() {
+        let rom = vec![0x69; 0x8000]; // Dummy ROM data
+        let mut cpu = CPU::new(rom);
+
+        // Set initial values for registers
+        cpu.registers.set_register_value_8(RegisterNames::A, 0xFF);
+        cpu.registers.set_register_value_8(RegisterNames::B, 0x01);
+
+        // Test ADD A, B instruction
+        cpu.execute_instruction(0x80); // ADD A, B instruction
+
+        // Check if the carry flag is set
+        assert_eq!(cpu.registers.flag.get_c(), true);
+        // Check the value of register A
+        assert_eq!(cpu.registers.get_register_value_8(RegisterNames::A), 0x00);
     }
     
 }
