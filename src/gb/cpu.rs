@@ -33,12 +33,12 @@ impl CPU {
         operation2: T,
     ) where
         F: Fn(&mut Registers, &mut MMU,Operand, Operand),
-        T: Fn(&mut Registers,Operand, Operand)
+        T: Fn(&mut Registers,Operand, Operand,&mut MMU)
     {   
         let blen = operand1.get_bit_length();
         let blen2 = operand2.get_bit_length();
         if blen == 16  {
-            operation2(&mut self.registers, operand1,operand2)
+            operation2(&mut self.registers, operand1,operand2,&mut self.memory)
         }
         else if blen == 8 {
             operation(&mut self.registers, &mut self.memory,operand1,operand2);
@@ -93,9 +93,9 @@ impl CPU {
         let opcode = self.read_byte();
         
         println!("Opcode : {:02X}",opcode);
+        println!("Program counter : {:02X}",self.registers.pc); 
         // Execute the instruction
         self.execute_instruction(opcode);
-        self.registers.pc +=1;
     }
 
     fn get_operand(&mut self, operand : &str, op_im : bool) -> Operand {
@@ -178,7 +178,7 @@ impl CPU {
                     sub_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
                 }
                 Instruction::LD => {
-                    self.execute_two_operand(operand1, operand2, ld_8bit, ld_16bit);
+                    ld(&mut self.registers , operand1,operand2, &mut self.memory);
                 }
                 Instruction::AND => {
                     // AND instruction
@@ -229,7 +229,7 @@ impl CPU {
                         inc_8bit(&mut self.registers, &mut self.memory, operand1);
                     } else if bit_len == 16 {
                         // 16 bit inc
-                        inc_16bit(&mut self.registers, operand1);
+                        inc_16bit(&mut self.registers, operand1, &mut self.memory);
                     } else {
                         panic!("Invalid operand size");
                     }
@@ -241,7 +241,7 @@ impl CPU {
                         dec_8bit(&mut self.registers, &mut self.memory, operand1);
                     } else if operand1.get_bit_length() == 16 {
                         // 16 bit dec
-                        dec_16bit(&mut self.registers, operand1);
+                        dec_16bit(&mut self.registers, operand1, &mut self.memory);
                     } else {
                         panic!("Invalid operand size");
                     }

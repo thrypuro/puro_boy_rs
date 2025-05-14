@@ -17,8 +17,15 @@ pub enum RegisterNames {
     HL,
     SP,
     PC,
-
 }
+
+pub enum FlagNames {
+    Z,
+    N,
+    H,
+    C,
+}
+
 pub struct Flag {
     pub z: bool,
     pub n: bool,
@@ -99,7 +106,7 @@ impl Registers {
             de: 0,
             hl: 0,
             sp : 0xFFFE,
-            pc : 0x100,
+            pc : 0x102,
             flag: Flag {
                 z: false,
                 n: false,
@@ -118,7 +125,7 @@ impl Registers {
             RegisterNames::E => (self.de & 0xFF) as u8,
             RegisterNames::H => (self.hl >> 8) as u8,
             RegisterNames::L => (self.hl & 0xFF) as u8,
-            _ =>  panic!("Invalid register"),
+            _ =>  panic!("Invalid register {:?}",register),
         }
     }
     pub fn set_register_value_16(&mut self, register: RegisterNames, value: u16) {
@@ -204,6 +211,7 @@ pub fn match_string_to_register(reg : &str) -> RegisterNames {
         "E" => RegisterNames::E,
         "H" => RegisterNames::H,
         "L" => RegisterNames::L,
+        
         _   => match_string_to_register16(reg)
     }
 }

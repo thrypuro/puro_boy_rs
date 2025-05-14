@@ -31,17 +31,17 @@ impl Operand {
             
         }
     }
-    pub fn write_u16(&self, value: u16, registers: &mut Registers) {
+    pub fn write_u16(&self, value: u16, registers: &mut Registers, memory: &mut MMU) {
         match self {
             Operand::Register(RegisterNames::AF) => registers.af = value,
             Operand::Register(RegisterNames::BC) => registers.bc = value,
             Operand::Register(RegisterNames::DE) => registers.de = value,
             Operand::Register(RegisterNames::HL) => registers.hl = value,
-
-            _ => panic!("Invalid register for 16-bit write"),
+            Operand::Memory(addr) => memory.write_word(*addr, value),
+            _ => panic!("Invalid register for 16-bit write {:?}",self),
         }
     }
-    pub fn read_16(&self, registers: &Registers) -> u16 {
+    pub fn read_16(&self, registers: &Registers, memory: &mut MMU) -> u16 {
         match self {
             Operand::Register(RegisterNames::AF) => registers.af,
             Operand::Register(RegisterNames::BC) => registers.bc,
@@ -49,7 +49,8 @@ impl Operand {
             Operand::Register(RegisterNames::HL) => registers.hl,
             Operand::Register(RegisterNames::SP) => registers.sp,
             Operand::Immediate16(value) => *value,
-            _ => panic!("Invalid register for 16-bit read"),
+            Operand::Memory(addr) => memory.read(*addr) as u16,
+            _ => panic!("Invalid register for 16-bit read {:?}",self),
         }
     }
     pub fn get_bit_length(&self) -> u8 {
@@ -70,7 +71,14 @@ impl Operand {
                 RegisterNames::PC => 16,
 
             },
-            Operand::Memory(_) => 8,
+            Operand::Memory(i) => {
+                if *i>>8  > 0 {
+                    16
+                }
+                else {
+                    8
+                }
+            },
             Operand::Immediate(_) => 8,
             Operand::Immediate16(_) => 16,
         }
@@ -115,8 +123,9 @@ pub fn dec_8bit(
 pub fn inc_16bit(
     registers: &mut Registers,
     operand: Operand,
+    memory : &mut MMU
 ) {
-    let value = operand.read_16(registers);
+    let value = operand.read_16(registers,memory);
     let result = value.wrapping_add(1);
 
     // Set flags
@@ -125,14 +134,16 @@ pub fn inc_16bit(
     registers.flag.h = (value & 0x0FFF) == 0x0FFF;
 
     // Write result back to the operand
-    operand.write_u16(result, registers);
+    operand.write_u16(result, registers, memory);
 }
 
 pub fn dec_16bit(
     registers: &mut Registers,
     operand: Operand,
+    memory : &mut MMU
+
 ) {
-    let value = operand.read_16(registers);
+    let value = operand.read_16(registers,memory);
     let result = value.wrapping_sub(1);
 
     // Set flags
@@ -141,7 +152,7 @@ pub fn dec_16bit(
     registers.flag.h = (value & 0x0FFF) == 0;
 
     // Write result back to the operand
-    operand.write_u16(result, registers);
+    operand.write_u16(result, registers,memory);
 }
 
 
@@ -192,9 +203,10 @@ pub fn add_16bit(
     registers: &mut Registers,
     operand1: Operand,
     operand2: Operand,
+    memory : &mut MMU
 ) {
-    let value1 = operand1.read_16(registers);
-    let value2 = operand2.read_16(registers);
+    let value1 = operand1.read_16(registers,memory);
+    let value2 = operand2.read_16(registers,memory);
     let result = value1.wrapping_add(value2);
 
     // Set flags
@@ -204,7 +216,7 @@ pub fn add_16bit(
     registers.flag.c = (value1 as u32 + value2 as u32) > 0xFFFF;
 
     // Write result back to the first operand
-    operand1.write_u16(result, registers);
+    operand1.write_u16(result, registers,memory);
 }
 
 pub fn sub_8bit(
@@ -252,9 +264,10 @@ pub fn sub_16bit(
     registers: &mut Registers,
     operand1: Operand,
     operand2: Operand,
+    memory : &mut MMU
 ) {
-    let value1 = operand1.read_16(registers);
-    let value2 = operand2.read_16(registers);
+    let value1 = operand1.read_16(registers,memory);
+    let value2 = operand2.read_16(registers,memory);
     let result = value1.wrapping_sub(value2);
 
     // Set flags
@@ -264,7 +277,7 @@ pub fn sub_16bit(
     registers.flag.c = (value1 as u32) < (value2 as u32);
 
     // Write result back to the first operand
-    operand1.write_u16(result, registers);
+    operand1.write_u16(result, registers,memory);
 }
 
 
@@ -354,13 +367,27 @@ pub fn ld_8bit(
     operand1.write(value, registers, memory);
 }
 
-pub fn ld_16bit(
+pub fn ld(
     registers: &mut Registers,
     operand1: Operand,
     operand2: Operand,
+    memory : &mut MMU
 ) {
-    let value = operand2.read_16(registers);
-    operand1.write_u16(value, registers);
+    let mut value : u16 = 0;
+    if operand2.get_bit_length() == 8{
+        value = operand2.read(registers,memory) as u16;
+    }
+    else {
+        value = operand2.read_16(registers,memory);
+    }
+    if operand1.get_bit_length() == 16
+    {
+        operand1.write_u16(value, registers,memory);
+    }
+    else {
+        operand1.write(value as u8, registers, memory);
+    }
+    
 }
 
 // rlc : rotate left circular
@@ -552,7 +579,7 @@ pub fn jp(
 ) {
     if condition {
 
-        let address = operand.read_16(registers);
+        let address = operand.read_16(registers,memory);
         let pc = &mut registers.pc;
         *pc = address;
     }
@@ -566,7 +593,7 @@ pub fn call(
 
 ) {
     if condition {
-        let address = operand.read_16(registers);
+        let address = operand.read_16(registers,memory );
         let pc = &mut registers.pc;
         let sp = &mut registers.sp;
         *sp = sp.wrapping_sub(2);
@@ -686,7 +713,7 @@ pub fn push(
     memory: &mut MMU,
     operand: Operand,
 ) {
-    let value = operand.read_16(registers);
+    let value = operand.read_16(registers,memory);
     let sp = &mut registers.sp;
     *sp = sp.wrapping_sub(2);
     memory.write_word(*sp, value);
@@ -700,5 +727,5 @@ pub fn pop(
     let sp = &mut registers.sp;
     let value = memory.read_word(*sp);
     *sp = sp.wrapping_add(2);
-    operand.write_u16(value, registers);
+    operand.write_u16(value, registers,memory);
 }

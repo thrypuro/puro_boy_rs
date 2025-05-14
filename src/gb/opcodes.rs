@@ -75,8 +75,9 @@ pub fn match_string_to_instruction(instr : &str) -> Instruction {
         "RLCA" => Instruction::RLCA,
         "PUSH" => Instruction::PUSH,
         "POP" => Instruction::POP,
-        
+        "JP" => Instruction::JP,
+        "CALL" => Instruction::CALL,
 
-        _     => panic!("Unknown instruction: {}", instr),
+         _ => panic!("Unknown instruction: {}", instr),
     }
 }
