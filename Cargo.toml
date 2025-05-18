@@ -1,0 +1,11 @@
+[package]
+name = "puro_boy"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+json = "0.12.4"
+rand = "0.9.1"
+sdl2 = "0.37.0"
