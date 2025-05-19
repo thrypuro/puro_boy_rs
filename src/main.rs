@@ -1,19 +1,18 @@
 #![crate_name = "puro_boy"]
 use rand;
-use rand::Rng;
+use sdl2::render::{Canvas, Texture, WindowCanvas};
+use sdl2::sys::Window;
 use std::fs;
 use std::io;
 mod gb;
 use sdl2::event::{self, Event};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
+use sdl2::rect::Point;
 use std::time::Duration;
 
-const width: u32 = 600;
-const height: u32 = 800;
-
-const random_colors: [sdl2::pixels::Color; 2] =
-    [sdl2::pixels::Color::BLUE, sdl2::pixels::Color::BLACK];
+const width: u32 = 128;
+const height: u32 = 128;
 
 fn run_cpu() {
     println!("Enter the path to the ROM file:");
@@ -41,7 +40,6 @@ fn run_cpu() {
 }
 
 fn create_window() {
-    // todo!();
     //
 
     let sdl_context = sdl2::init().unwrap();
@@ -56,18 +54,22 @@ fn create_window() {
     let mut canvas = window.into_canvas().build().expect("Couldnt build canvas");
     let mut lastx = 0;
     let mut lasty = 0;
-    // canvas.set_draw_color(Color::RGB(0, 0, 0));
+    let a = [
+        0x7C, 0x7C, 0x00, 0xC6, 0xC6, 0x00, 0x00, 0xFE, 0xC6, 0xC6, 0x00, 0xC6, 0xC6, 0x00, 0x00,
+        0x00,
+    ];
 
-    canvas.clear();
-    canvas.present();
+    let b = gb::ppu::get_tile(a);
+
     let mut event_pump = sdl_context
         .event_pump()
         .expect("Couldnt intialise event pump");
+
     let mut i: u8 = 0;
+    let org = Point::new(0, 0);
     'running: loop {
         i = i.wrapping_add(1);
-        // canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
-        // canvas.clear();
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -78,28 +80,22 @@ fn create_window() {
                     break 'running;
                 }
                 Event::MouseButtonDown { x, y, .. } => {
-                    // let color = sdl2::pixels::Color::RGB(x as u8, y as u8, 255);
-                    let color = random_colors[rand::thread_rng().random_range(0..2)];
-                    canvas.set_draw_color(color);
-
-                    let p1 = sdl2::rect::Point::new(lastx, lasty);
-                    let p2 = sdl2::rect::Point::new(x, y);
-                    let _ = canvas.draw_line(p1, p2);
-                    lastx = x;
-                    lasty = y;
-                    println!("mouse btn down at ({},{})", x, y);
-                    canvas.present();
+                    // (mouse event code omitted)
                 }
                 _ => {}
             }
         }
-        canvas.set_draw_color(Color::RGB(255, 0, 0));
+
+        gb::ppu::render_tile(b, &mut canvas);
+
+        // Clear the canvas once per frame
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
         canvas.clear();
 
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 pub fn main() {
-    // create_window();
-    run_cpu();
+    create_window();
+    // run_cpu();
 }
