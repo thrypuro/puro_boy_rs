@@ -1,12 +1,10 @@
 
 pub struct MMU {
-    ram : [u8; 0xFFFF],
-    rom : Vec<u8>,
-    
+    ram: [u8; 0xFFFF],
+    pub rom: Vec<u8>,
 }
 
 impl MMU {
-    
     pub fn new(rom: Vec<u8>) -> MMU {
         MMU {
             ram: [0; 0xFFFF],
@@ -37,4 +35,3 @@ impl MMU {
         self.rom[address as usize]
     }
 }
-

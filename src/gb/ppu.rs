@@ -10,8 +10,32 @@ pub const GAMEBOY_COLORS: [sdl2::pixels::Color; 4] = [
     Color::RGB(96, 96, 96),
     Color::RGB(0, 0, 0),
 ];
+#[derive(Debug, PartialEq, Eq)]
+pub struct tile {
+    pub data: [[u8; 8]; 8],
+}
+#[derive(Debug, PartialEq, Eq)]
+pub struct ppu {
+    vram: Vec<u8>,
+    pub tiles: Vec<tile>,
+    tilemap: [[u8; 32]; 32],
+}
 
-pub fn render_tile(tile: [[u8; 8]; 8], canvas: &mut WindowCanvas) {
+impl ppu {
+    pub fn new() -> Self {
+        ppu {
+            vram: vec![0; 8192],
+            tiles: Vec::new(),
+            tilemap: [[0; 32]; 32],
+        }
+    }
+
+    pub fn push_tile(&mut self, t: tile) {
+        self.tiles.push(t);
+    }
+}
+
+pub fn render_tile(tile: [[u8; 8]; 8], canvas: &mut WindowCanvas, position: Point) {
     // Draw the 8x8 tile
     for y in 0..8u32 {
         for x in 0..8u32 {
@@ -19,15 +43,15 @@ pub fn render_tile(tile: [[u8; 8]; 8], canvas: &mut WindowCanvas) {
             let c_col = GAMEBOY_COLORS[ci as usize];
             canvas.set_draw_color(c_col);
             let p = Point::new(
-                x as i32 + (width / 2 - 4) as i32, // Center the tile
-                y as i32 + (height / 2 - 4) as i32,
-            );
+                x as i32, // Center the tile
+                y as i32,
+            ) + position;
             canvas.draw_point(p).expect("Failed to draw point");
         }
     }
 
     // Present the canvas once per frame
-    canvas.present();
+    // canvas.present();
 }
 
 pub fn get_pixelrow(b1: u8, b2: u8) -> [u8; 8] {
@@ -40,7 +64,7 @@ pub fn get_pixelrow(b1: u8, b2: u8) -> [u8; 8] {
     c1
 }
 
-pub fn get_tile(t1: [u8; 16]) -> [[u8; 8]; 8] {
+pub fn get_tile(t1: &[u8]) -> [[u8; 8]; 8] {
     let mut i = 0;
     let mut cs = [[0u8; 8]; 8];
     while i < 16 {
@@ -49,6 +73,17 @@ pub fn get_tile(t1: [u8; 16]) -> [[u8; 8]; 8] {
     }
     println!("cs {:?}", cs);
     cs
+}
+
+pub fn loadtileset(rom: &Vec<u8>) -> ppu {
+    let mut tileset = ppu::new();
+    for i in (0..(384)).step_by(16) {
+        let t = tile {
+            data: get_tile(&rom[i..i + 16]),
+        };
+        tileset.push_tile(t);
+    }
+    tileset
 }
 
 #[cfg(test)]
@@ -67,7 +102,7 @@ mod tests {
             0x00, 0x00,
         ];
         assert_eq!(
-            get_tile(a),
+            get_tile(&a),
             [
                 [0, 3, 3, 3, 3, 3, 0, 0],
                 [2, 2, 0, 0, 0, 2, 2, 0],
