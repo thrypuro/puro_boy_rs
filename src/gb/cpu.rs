@@ -10,7 +10,7 @@ const DEB: bool = true;
 
 pub struct CPU {
     registers: Registers,
-    memory: MMU,
+    pub memory: MMU,
     halted: bool,
     opcodes: json::JsonValue,
 }
