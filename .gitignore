@@ -1,5 +1,4 @@
 /target
-/test
+/tests
 /.vscode
-.lock
 docs/

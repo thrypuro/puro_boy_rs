@@ -1,14 +1,12 @@
-#![crate_name = "puro_boy"]
-use sdl2::render::{Canvas, Texture, WindowCanvas};
-
+use gb::mmu::MMU;
 use std::fs;
 use std::io;
 mod gb;
 use gb::cpu::CPU;
-use sdl2::event::{self, Event};
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
-use sdl2::rect::Point;
+use sdl3::event::{self, Event};
+use sdl3::keyboard::Keycode;
+use sdl3::pixels::Color;
+use sdl3::rect::Point;
 use std::time::Duration;
 
 const WIDTH: u32 = 160;
@@ -24,7 +22,7 @@ fn run_cpu(cpu: &mut CPU) {
 
 fn create_window(cpu: CPU) {
     //
-    let sdl_context = sdl2::init().unwrap();
+    let sdl_context = sdl3::init().unwrap();
 
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -33,7 +31,7 @@ fn create_window(cpu: CPU) {
         .position_centered()
         .build()
         .expect("Couldn't build window");
-    let mut canvas = window.into_canvas().build().expect("Couldnt build canvas");
+    let mut canvas = window.into_canvas();
 
     let a = [
         0x7C, 0x7C, 0x00, 0xC6, 0xC6, 0x00, 0x00, 0xFE, 0xC6, 0xC6, 0x00, 0xC6, 0xC6, 0x00, 0x00,
@@ -108,9 +106,19 @@ pub fn main() {
             return;
         }
     };
-    let mut cpu = CPU::new(rom);
-    let mut ppu = gb::ppu::loadtileset(&cpu.memory.rom);
+    let mut mmu = MMU::new(rom);
+    let mut cpu = CPU::new(&mut mmu);
+    for _ in 0..50 {
+        cpu.step();
+    }
+    cpu.print_registers();
+    for i in (0x8000)..(0x9fff + 1) {
+        let a = mmu.read(i);
+        if a != 0 {
+            println!("vram at {} = {}", i, a);
+        }
+    }
 
     // create_window(cpu);
-    // run_cpu();
+    // run_cpu(cpu);
 }

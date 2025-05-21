@@ -21,6 +21,7 @@ pub enum Instruction {
     OR,
     XOR,
     LD,
+    LDH,
 
     // Bit manipulation instructions
     CP,
@@ -37,6 +38,7 @@ pub enum Instruction {
     RETI,
     RST,
     // Other instructions
+    DI,
 }
 
 pub fn get_opcodes() -> json::JsonValue {
@@ -65,6 +67,7 @@ pub fn match_string_to_instruction(instr: &str) -> Instruction {
         "INC" => Instruction::INC,
         "DEC" => Instruction::DEC,
         "LD" => Instruction::LD,
+        "LDH" => Instruction::LDH,
         "RRCA" => Instruction::RRCA,
         "RLA" => Instruction::RLA,
         "RRA" => Instruction::RRA,
@@ -74,7 +77,7 @@ pub fn match_string_to_instruction(instr: &str) -> Instruction {
         "JP" => Instruction::JP,
         "JR" => Instruction::JR,
         "CALL" => Instruction::CALL,
-        // "DI"   => IB
+        "DI" => Instruction::DI,
         _ => panic!("Unknown instruction: {}", instr),
     }
 }
