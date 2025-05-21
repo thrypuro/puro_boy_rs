@@ -1,10 +1,10 @@
-use sdl2::event::{self, Event};
-use sdl2::pixels::Color;
-use sdl2::rect::Point;
-use sdl2::render::{Canvas, Texture, WindowCanvas};
+use sdl3::event::{self, Event};
+use sdl3::pixels::Color;
+use sdl3::rect::Point;
+use sdl3::render::{Canvas, Texture, WindowCanvas};
 const width: u32 = 128;
 const height: u32 = 128;
-pub const GAMEBOY_COLORS: [sdl2::pixels::Color; 4] = [
+pub const GAMEBOY_COLORS: [sdl3::pixels::Color; 4] = [
     Color::RGB(255, 255, 255),
     Color::RGB(192, 192, 192),
     Color::RGB(96, 96, 96),

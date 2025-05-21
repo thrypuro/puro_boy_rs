@@ -34,7 +34,7 @@ impl Operand {
     pub fn write_u16(&self, value: u16, registers: &mut Registers, memory: &mut MMU) {
         match self {
             Operand::Register(reg) => registers.set_register_value_16(*reg, value),
-            Operand::Memory(addr) => memory.write_word(*addr, value),
+            Operand::Memory(addr) => memory.write(*addr, value as u8),
 
             _ => panic!("Invalid register for 16-bit write {:?}", self),
         }
@@ -300,6 +300,34 @@ pub fn ld(registers: &mut Registers, operand1: Operand, operand2: Operand, memor
         operand1.write(value as u8, registers, memory);
     }
 }
+pub fn ldh(registers: &mut Registers, operand1: Operand, operand2: Operand, memory: &mut MMU) {
+    // Calculate the high memory address - always 0xFF00 + offset
+    let addr = match operand1 {
+        Operand::Register(RegisterNames::A) => {
+            // LDH A, (a8) or LDH A, (C)
+            let offset = match operand2 {
+                Operand::Immediate(imm) => imm as u16,
+                Operand::Register(RegisterNames::C) => {
+                    registers.get_register_value_8(RegisterNames::C) as u16
+                }
+                _ => panic!("Invalid operand for LDH instruction"),
+            };
+            let addr = 0xFF00 + offset;
+            let value = memory.read(addr);
+            registers.set_register_value_8(RegisterNames::A, value);
+            return;
+        }
+        Operand::Immediate(imm) => 0xFF00 + imm as u16,
+        Operand::Register(RegisterNames::C) => {
+            0xFF00 + registers.get_register_value_8(RegisterNames::C) as u16
+        }
+        _ => panic!("Invalid operand for LDH instruction"),
+    };
+
+    // Store the value from register A to the high memory address
+    let value = registers.get_register_value_8(RegisterNames::A);
+    memory.write(addr, value);
+}
 
 // rlc : rotate left circular
 pub fn rlc(registers: &mut Registers, memory: &mut MMU, operand: Operand) {
@@ -504,6 +532,17 @@ pub fn daa(registers: &mut Registers) {
     registers.flag.z = a == 0;
     registers.flag.h = false;
     registers.flag.c = carry != 0;
+}
+
+/// Disables interrupts by clearing the IME flag
+pub fn di(registers: &mut Registers, cpu_ime: &mut bool) {
+    // The DI instruction disables interrupts by clearing the IME (Interrupt Master Enable) flag
+    // This prevents the CPU from responding to any interrupts
+    *cpu_ime = false;
+
+    // Note: DI doesn't immediately disable interrupts, it actually disables them after
+    // the instruction following DI is executed, but this simplified implementation
+    // disables them immediately
 }
 
 pub fn cpl(registers: &mut Registers) {

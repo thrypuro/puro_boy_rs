@@ -106,17 +106,17 @@ pub struct Registers {
 impl Registers {
     pub fn new() -> Self {
         Self {
-            af: 0x0,
-            bc: 0x0,
-            de: 0x0,
-            hl: 0x0,
+            af: 0x1 << 8,
+            bc: 0x13,
+            de: 0xd8,
+            hl: 0x14d,
             sp: 0xFFFE,
             pc: 0x100,
             flag: Flag {
-                z: false,
+                z: true,
                 n: false,
-                h: false,
-                c: false,
+                h: true,
+                c: true,
             },
         }
     }
