@@ -35,7 +35,7 @@ pub enum RegisterNames {
     SP,
     PC,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug)]
 pub enum FlagNames {
     Z,
     N,
@@ -87,13 +87,14 @@ pub enum Instruction {
     DI,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Operand {
     Register(RegisterNames),
     Memory(u16),      // Memory address
     Immediate(u8),    // Immediate value
     Immediate16(u16), // 16-bit immediate value
     Flag(FlagNames),
+    NIL,
 }
 
 pub struct Flag {
@@ -170,5 +171,17 @@ fn match_string_to_register16(reg: &str) -> RegisterNames {
         "PC" => RegisterNames::PC,
 
         _ => panic!("Unknown register: {}", reg),
+    }
+}
+
+fn match_string_to_flag(flag: &str) -> FlagNames {
+    match flag {
+        "Z" => FlagNames::Z,
+        "H" => FlagNames::H,
+        "C" => FlagNames::C,
+        "N" => FlagNames::N,
+        "NZ" => FlagNames::NZ,
+        "NC" => FlagNames::NC,
+        _ => panic!("Invalid Flag type {:?}", flag),
     }
 }
