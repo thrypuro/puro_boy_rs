@@ -1,10 +1,8 @@
 use crate::gb::mmu::MMU;
-use sdl3::event::{self, Event};
 use sdl3::pixels::Color;
 use sdl3::rect::Point;
-use sdl3::render::{Canvas, Texture, WindowCanvas};
-const width: u32 = 128;
-const height: u32 = 128;
+use sdl3::render::WindowCanvas;
+
 pub const GAMEBOY_COLORS: [sdl3::pixels::Color; 4] = [
     Color::RGB(255, 255, 255),
     Color::RGB(192, 192, 192),

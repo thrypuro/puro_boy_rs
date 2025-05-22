@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 json = "0.12.4"
+log = "0.4.27"
 rand = "0.9.1"
 sdl3 = "0.14.27"
