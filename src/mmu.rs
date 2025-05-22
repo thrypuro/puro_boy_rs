@@ -1,4 +1,8 @@
-use crate::ppu::PPU;
+mod cart;
+mod ioreg;
+mod ppu;
+
+use ppu::PPU;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct MMU {
