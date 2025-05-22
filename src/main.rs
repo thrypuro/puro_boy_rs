@@ -1,6 +1,5 @@
 mod cpu;
 mod mmu;
-mod ppu;
 
 use cpu::CPU;
 use mmu::MMU;
@@ -13,23 +12,20 @@ use std::fs;
 use std::io;
 use std::time::Duration;
 
-const WIDTH: u32 = 160;
-const HEIGHT: u32 = 144;
-
-fn create_window() -> (WindowCanvas, EventPump) {
+fn create_window(width: u32, height: u32) -> (WindowCanvas, EventPump) {
     //
     let sdl_context = sdl3::init().unwrap();
 
     let video_subsystem = sdl_context.video().unwrap();
 
     let window = video_subsystem
-        .window("Puro boy", WIDTH, HEIGHT)
+        .window("Puro boy", width, height)
         .position_centered()
         .build()
         .expect("Couldn't build window");
-    let mut canvas = window.into_canvas();
+    let canvas = window.into_canvas();
 
-    let mut event_pump = sdl_context
+    let event_pump = sdl_context
         .event_pump()
         .expect("Couldnt intialise event pump");
 
