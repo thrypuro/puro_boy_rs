@@ -1,10 +1,3 @@
-pub mod cpu;
-mod instructions;
-mod ioreg;
-pub mod mmu;
-pub mod ppu;
-mod registers;
-
 use json;
 
 pub const DEB: bool = true;
@@ -160,7 +153,7 @@ pub fn match_string_to_register(reg: &str) -> RegisterNames {
         _ => match_string_to_register16(reg),
     }
 }
-fn match_string_to_register16(reg: &str) -> RegisterNames {
+pub fn match_string_to_register16(reg: &str) -> RegisterNames {
     // match the register to the enum
     match reg {
         "AF" => RegisterNames::AF,
@@ -174,7 +167,7 @@ fn match_string_to_register16(reg: &str) -> RegisterNames {
     }
 }
 
-fn match_string_to_flag(flag: &str) -> FlagNames {
+pub fn match_string_to_flag(flag: &str) -> FlagNames {
     match flag {
         "Z" => FlagNames::Z,
         "H" => FlagNames::H,
@@ -184,4 +177,12 @@ fn match_string_to_flag(flag: &str) -> FlagNames {
         "NC" => FlagNames::NC,
         _ => panic!("Invalid Flag type {:?}", flag),
     }
+}
+
+pub fn is_flag(operand: &str, instr: &Instruction) -> bool {
+    return (operand.contains("Z") || operand.contains("NZ") || operand.contains("C"))
+        && (*instr == Instruction::JP
+            || *instr == Instruction::CALL
+            || *instr == Instruction::RET
+            || *instr == Instruction::JR);
 }
