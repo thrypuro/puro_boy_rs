@@ -1,3 +1,4 @@
+use crate::gb::mmu::MMU;
 use sdl3::event::{self, Event};
 use sdl3::pixels::Color;
 use sdl3::rect::Point;
@@ -10,29 +11,32 @@ pub const GAMEBOY_COLORS: [sdl3::pixels::Color; 4] = [
     Color::RGB(96, 96, 96),
     Color::RGB(0, 0, 0),
 ];
+
 #[derive(Debug, PartialEq, Eq)]
-pub struct tile {
+pub struct Tile {
     pub data: [[u8; 8]; 8],
 }
 #[derive(Debug, PartialEq, Eq)]
-pub struct ppu {
-    vram: Vec<u8>,
-    pub tiles: Vec<tile>,
+pub struct PPU {
+    pub tiles: Vec<Tile>,
     tilemap: [[u8; 32]; 32],
+    scan_line: u8,
 }
 
-impl ppu {
-    pub fn new() -> Self {
-        ppu {
-            vram: vec![0; 8192],
+impl PPU {
+    pub fn new(mmu: &MMU) -> Self {
+        PPU {
             tiles: Vec::new(),
             tilemap: [[0; 32]; 32],
+            scan_line: 0,
         }
     }
 
-    pub fn push_tile(&mut self, t: tile) {
+    pub fn push_tile(&mut self, t: Tile) {
         self.tiles.push(t);
     }
+
+    pub fn turn_lcd_on(&mut self) {}
 }
 
 pub fn render_tile(tile: [[u8; 8]; 8], canvas: &mut WindowCanvas, position: Point) {
@@ -75,16 +79,16 @@ pub fn get_tile(t1: &[u8]) -> [[u8; 8]; 8] {
     cs
 }
 
-pub fn loadtileset(rom: &Vec<u8>) -> ppu {
-    let mut tileset = ppu::new();
-    for i in (0..(384)).step_by(16) {
-        let t = tile {
-            data: get_tile(&rom[i..i + 16]),
-        };
-        tileset.push_tile(t);
-    }
-    tileset
-}
+// pub fn loadtileset(rom: &Vec<u8>) -> ppu {
+//     let mut tileset = ppu::new();
+//     for i in (0..(384)).step_by(16) {
+//         let t = tile {
+//             data: get_tile(&rom[i..i + 16]),
+//         };
+//         tileset.push_tile(t);
+//     }
+//     tileset
+// }
 
 #[cfg(test)]
 mod tests {

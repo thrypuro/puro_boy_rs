@@ -1,15 +1,7 @@
 use crate::gb::mmu::MMU;
-use crate::gb::registers::{FlagNames, RegisterNames, Registers};
-/// Represents an operand, which can be a register or a memory address.
+use crate::gb::{Operand, RegisterNames, Registers};
 
-#[derive(Debug)]
-pub enum Operand {
-    Register(RegisterNames),
-    Memory(u16),      // Memory address
-    Immediate(u8),    // Immediate value
-    Immediate16(u16), // 16-bit immediate value
-    Flag(FlagNames),
-}
+/// Represents an operand, which can be a register or a memory address.
 
 // get operand bit length
 
