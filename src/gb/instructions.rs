@@ -1,5 +1,5 @@
-use crate::gb::mmu::MMU;
-use crate::gb::{Operand, RegisterNames, Registers};
+use super::mmu::MMU;
+use super::{Operand, RegisterNames, Registers};
 
 /// Represents an operand, which can be a register or a memory address.
 

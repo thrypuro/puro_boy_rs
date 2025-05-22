@@ -170,31 +170,3 @@ impl Registers {
         self.flag.reset_flags();
     }
 }
-
-pub fn match_string_to_register(reg: &str) -> RegisterNames {
-    // match the register to the enum
-    match reg {
-        "A" => RegisterNames::A,
-        "B" => RegisterNames::B,
-        "C" => RegisterNames::C,
-        "D" => RegisterNames::D,
-        "E" => RegisterNames::E,
-        "H" => RegisterNames::H,
-        "L" => RegisterNames::L,
-
-        _ => match_string_to_register16(reg),
-    }
-}
-fn match_string_to_register16(reg: &str) -> RegisterNames {
-    // match the register to the enum
-    match reg {
-        "AF" => RegisterNames::AF,
-        "BC" => RegisterNames::BC,
-        "DE" => RegisterNames::DE,
-        "HL" => RegisterNames::HL,
-        "SP" => RegisterNames::SP,
-        "PC" => RegisterNames::PC,
-
-        _ => panic!("Unknown register: {}", reg),
-    }
-}

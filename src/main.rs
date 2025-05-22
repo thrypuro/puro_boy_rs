@@ -12,14 +12,6 @@ use std::time::Duration;
 const WIDTH: u32 = 160;
 const HEIGHT: u32 = 144;
 
-fn run_cpu(cpu: &mut CPU) {
-    loop {
-        cpu.step();
-
-        cpu.print_registers();
-    }
-}
-
 fn create_window(cpu: &mut CPU) {
     //
     let sdl_context = sdl3::init().unwrap();
@@ -32,17 +24,6 @@ fn create_window(cpu: &mut CPU) {
         .build()
         .expect("Couldn't build window");
     let mut canvas = window.into_canvas();
-
-    let a = [
-        0x7C, 0x7C, 0x00, 0xC6, 0xC6, 0x00, 0x00, 0xFE, 0xC6, 0xC6, 0x00, 0xC6, 0xC6, 0x00, 0x00,
-        0x00,
-    ];
-
-    let b = gb::ppu::get_tile(&a);
-
-    // let c = gb::ppu::loadtileset(cpu.memory.rom);
-
-    // println!(" {:?}", c.tiles);
 
     let mut event_pump = sdl_context
         .event_pump()
@@ -58,9 +39,7 @@ fn create_window(cpu: &mut CPU) {
                 } => {
                     break 'running;
                 }
-                Event::MouseButtonDown { x, y, .. } => {
-                    // (mouse event code omitted)
-                }
+
                 _ => {}
             }
         }

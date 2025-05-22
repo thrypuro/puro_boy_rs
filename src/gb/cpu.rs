@@ -1,12 +1,11 @@
-use crate::gb::instructions::*;
-use crate::gb::mmu::MMU;
-use crate::gb::registers::match_string_to_register;
-use crate::gb::{get_opcodes, match_string_to_instruction, Instruction, RegisterNames, Registers};
+use super::instructions::*;
+use super::mmu::MMU;
+use super::{
+    get_opcodes, match_string_to_instruction, match_string_to_register, FlagNames, Instruction,
+    Operand, RegisterNames, Registers, DEB,
+};
 use json;
-
-use super::{FlagNames, Operand};
-
-const DEB: bool = true;
+use log;
 
 pub struct CPU<'a> {
     registers: Registers,
@@ -86,8 +85,8 @@ impl<'a> CPU<'a> {
         // Fetch the opcode from memory
         let opcode = self.read_byte();
 
-        println!("Opcode : {:02X}", opcode);
-        println!("Program counter : {:02X}", self.registers.pc);
+        log::debug!("Opcode : {:02X}", opcode);
+        log::debug!("Program counter : {:02X}", self.registers.pc);
         // Execute the instruction
         self.execute_instruction(opcode);
     }
