@@ -28,4 +28,4 @@ cargo run --release
 ## Screenshots
 
 ## References
-    - `opcodes.json` is taken from [here](https://gbdev.io/gb-opcodes/Opcodes.json)
+- `opcodes.json` is taken from [here](https://gbdev.io/gb-opcodes/Opcodes.json)
