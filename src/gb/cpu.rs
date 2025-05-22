@@ -1,10 +1,10 @@
 use crate::gb::instructions::*;
 use crate::gb::mmu::MMU;
-use crate::gb::opcodes::{get_opcodes, match_string_to_instruction, Instruction};
-use crate::gb::registers::{match_string_to_register, RegisterNames, Registers};
+use crate::gb::registers::match_string_to_register;
+use crate::gb::{get_opcodes, match_string_to_instruction, Instruction, RegisterNames, Registers};
 use json;
 
-use super::registers::FlagNames;
+use super::{FlagNames, Operand};
 
 const DEB: bool = true;
 
@@ -39,7 +39,6 @@ impl<'a> CPU<'a> {
         T: Fn(&mut Registers, Operand, Operand, &mut MMU),
     {
         let blen = operand1.get_bit_length();
-        let blen2 = operand2.get_bit_length();
         if blen == 16 {
             operation2(&mut self.registers, operand1, operand2, &mut self.memory)
         } else if blen == 8 {
@@ -120,7 +119,8 @@ impl<'a> CPU<'a> {
                 "C" => Operand::Flag(FlagNames::C),
                 "N" => Operand::Flag(FlagNames::N),
                 "NZ" => Operand::Flag(FlagNames::NZ),
-                _ => panic!("Invalid Flag type"),
+                "NC" => Operand::Flag(FlagNames::NC),
+                _ => panic!("Invalid Flag type {:?}", operand),
             }
         } else {
             // get the immediate value
@@ -218,15 +218,15 @@ impl<'a> CPU<'a> {
                     cp_8bit(&mut self.registers, &mut self.memory, operand1, operand2);
                 }
                 Instruction::CALL => {
-                    let condition = operand1.read(&self.registers, &self.memory) == 0;
+                    let condition = operand1.read(&self.registers, &self.memory) == 1;
                     call(&mut self.registers, &mut self.memory, operand2, condition);
                 }
                 Instruction::JP => {
-                    let condition = operand1.read(&self.registers, &self.memory) == 0;
+                    let condition = operand1.read(&self.registers, &self.memory) == 1;
                     jp(&mut self.registers, &mut self.memory, operand2, condition);
                 }
                 Instruction::JR => {
-                    let condition = operand1.read(&self.registers, &self.memory) == 0;
+                    let condition = operand1.read(&self.registers, &self.memory) == 1;
                     jr(&mut self.registers, &mut self.memory, operand2, condition);
                 }
                 _ => {
@@ -296,6 +296,16 @@ impl<'a> CPU<'a> {
 
                 Instruction::JR => {
                     jr(&mut self.registers, &mut self.memory, operand1, true);
+                }
+
+                Instruction::CALL => {
+                    call(&mut self.registers, &mut self.memory, operand1, true);
+                }
+                Instruction::RET => {
+                    // RET instruction
+                    // self.registers.ret();
+                    let condition = operand1.read(&self.registers, &self.memory) == 0;
+                    ret(&mut self.registers, &mut self.memory, condition);
                 }
 
                 _ => {
@@ -383,8 +393,6 @@ impl<'a> CPU<'a> {
                     panic!("Unknown instruction: {:?}", instr);
                 }
             }
-        } else {
-            panic!("Invalid number of operands");
         }
     }
 

@@ -1,4 +1,5 @@
 use gb::mmu::MMU;
+use gb::ppu::PPU;
 use std::fs;
 use std::io;
 mod gb;
@@ -6,7 +7,6 @@ use gb::cpu::CPU;
 use sdl3::event::{self, Event};
 use sdl3::keyboard::Keycode;
 use sdl3::pixels::Color;
-use sdl3::rect::Point;
 use std::time::Duration;
 
 const WIDTH: u32 = 160;
@@ -20,7 +20,7 @@ fn run_cpu(cpu: &mut CPU) {
     }
 }
 
-fn create_window(cpu: CPU) {
+fn create_window(cpu: &mut CPU) {
     //
     let sdl_context = sdl3::init().unwrap();
 
@@ -48,8 +48,6 @@ fn create_window(cpu: CPU) {
         .event_pump()
         .expect("Couldnt intialise event pump");
 
-    canvas.set_draw_color(Color::RGB(255, 255, 255));
-    canvas.clear();
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -67,25 +65,9 @@ fn create_window(cpu: CPU) {
             }
         }
         // Clear the canvas once per frame
-        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
-        let mut i: u8 = 0;
-        let mut org = Point::new(0, 0);
 
-        // for tile in &c.tiles {
-        //     gb::ppu::render_tile(tile.data, &mut canvas, org);
-        //     org += Point::new(8, 8);
-        //     i += 1;
-
-        //     // if i == 10 {
-        //     //     break;
-        //     // }
-        // }
-
-        // Clear the canvas once per frame
-        // canvas.set_draw_color(Color::RGB(255, 255, 255));
-        // canvas.clear();
-        //
         canvas.present();
 
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
@@ -106,19 +88,8 @@ pub fn main() {
             return;
         }
     };
-    let mut mmu = MMU::new(rom);
-    let mut cpu = CPU::new(&mut mmu);
-    for _ in 0..50 {
-        cpu.step();
-    }
-    cpu.print_registers();
-    for i in (0x8000)..(0x9fff + 1) {
-        let a = mmu.read(i);
-        if a != 0 {
-            println!("vram at {} = {}", i, a);
-        }
-    }
+    // let mut mmu = MMU::new(rom);
+    // let mut cpu = CPU::new(&mut mmu);
 
-    // create_window(cpu);
-    // run_cpu(cpu);
+    // create_window(&mut cpu);
 }

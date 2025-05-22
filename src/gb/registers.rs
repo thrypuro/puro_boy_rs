@@ -1,39 +1,5 @@
+use super::{Flag, FlagNames, RegisterNames, Registers};
 use core::panic;
-
-#[derive(Copy, Clone)]
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum RegisterNames {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-    AF,
-    BC,
-    DE,
-    HL,
-    SP,
-    PC,
-}
-#[derive(Debug, PartialEq, Eq)]
-pub enum FlagNames {
-    Z,
-    N,
-    H,
-    C,
-    NZ,
-}
-
-pub struct Flag {
-    pub z: bool,
-    pub n: bool,
-    pub h: bool,
-    pub c: bool,
-}
-
 impl Flag {
     pub fn new() -> Self {
         Self {
@@ -93,16 +59,6 @@ impl Flag {
     }
 }
 
-pub struct Registers {
-    pub af: u16,
-    pub bc: u16,
-    pub de: u16,
-    pub hl: u16,
-    pub sp: u16,
-    pub pc: u16,
-    pub flag: Flag,
-}
-
 impl Registers {
     pub fn new() -> Self {
         Self {
@@ -142,6 +98,7 @@ impl Registers {
             RegisterNames::BC => self.bc = value,
             RegisterNames::DE => self.de = value,
             RegisterNames::HL => self.hl = value,
+            RegisterNames::SP => self.sp = value,
 
             _ => panic!("Invalid register"),
         }
@@ -175,6 +132,7 @@ impl Registers {
             FlagNames::C => self.get_carry_flag(),
             FlagNames::N => self.get_subtract_flag(),
             FlagNames::NZ => !self.get_zero_flag(),
+            FlagNames::NC => !self.get_carry_flag(),
         }
     }
 

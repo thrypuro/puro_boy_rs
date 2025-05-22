@@ -1,25 +1,42 @@
+use super::ppu::PPU;
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct MMU {
-    ram: [u8; 0xFFFF + 1],
+    // Memory Map
+    // ROM (0,0x7fff)
+    rom: [u8; 0x8000],
+    // contains VRAM, tiles and tileset (0x8000 , 0x9fff)
+    ppu: PPU,
+    // External ram (from Cart) (0xA000 ,0xBFFF)
+    ext_ram: [u8; (0xBFFF - 0xA000) + 1],
+    // Work ram WRAM(0xC000,0xDFFF)
+    wram: [u8; (0xDFFF - 0xC000) + 1],
+    
+    // Echo ram (prohibited) 
+
+    
+    
 }
 
 impl MMU {
-    pub fn new(rom: Vec<u8>) -> MMU {
-        let mut m = MMU {
-            ram: [0; 0xFFFF + 1],
-        };
-        println!("Length of rom {}", &rom.len());
-        for i in 0..0x8000 {
-            m.ram[i] = rom[i];
-        }
-        m
-    }
+    // pub fn new(rom: Vec<u8>) -> MMU {
+    //     // let mut m = MMU {
+    //     //     ram: [0; 0xFFFF + 1],
+    //     // };
+    //     // println!("Length of rom {}", &rom.len());
+    //     // for i in 0..0x8000 {
+    //     //     m.ram[i] = rom[i];
+    //     // }
+    //     // m
+    // }
     /// Reads a byte from the RAM at the specified address.
     pub fn read(&self, address: u16) -> u8 {
-        self.ram[(address) as usize]
+        // self.ram[(address) as usize]
+        0
     }
     /// Writes a byte to the RAM at the specified address.
     pub fn write(&mut self, address: u16, value: u8) {
-        self.ram[(address) as usize] = value;
+        // self.ram[(address) as usize] = value;
         // println!("ram is {}", self.ram[address as usize]);
     }
     /// Reads a byte from the RAM at the specified address.
@@ -35,6 +52,6 @@ impl MMU {
     }
     /// Reads a byte from the ROM at the specified address.
     pub fn read_rom(&self, address: u16) -> u8 {
-        self.ram[address as usize]
+        self.rom[address as usize]
     }
 }
