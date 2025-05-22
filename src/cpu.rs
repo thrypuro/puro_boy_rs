@@ -1,11 +1,15 @@
-use super::instructions::*;
-use super::mmu::MMU;
-use super::{
-    get_opcodes, match_string_to_flag, match_string_to_instruction, match_string_to_register,
-    FlagNames, Instruction, Operand, RegisterNames, Registers, DEB,
-};
-use json;
+mod instructions;
+mod registers;
+mod shared;
+
+use crate::MMU;
+use instructions::*;
+use json::{self, JsonValue};
 use log;
+use shared::{
+    get_opcodes, is_flag, match_string_to_flag, match_string_to_instruction,
+    match_string_to_register, Instruction, Operand, RegisterNames, Registers,
+};
 
 pub struct CPU<'a> {
     registers: Registers,
@@ -24,26 +28,6 @@ impl<'a> CPU<'a> {
             halted: false,
             opcodes: get_opcodes(),
             ime: false,
-        }
-    }
-
-    fn execute_two_operand<F, T>(
-        &mut self,
-        operand1: Operand,
-        operand2: Operand,
-        operation: F,
-        operation2: T,
-    ) where
-        F: Fn(&mut Registers, &mut MMU, Operand, Operand),
-        T: Fn(&mut Registers, Operand, Operand, &mut MMU),
-    {
-        let blen = operand1.get_bit_length();
-        if blen == 16 {
-            operation2(&mut self.registers, operand1, operand2, &mut self.memory)
-        } else if blen == 8 {
-            operation(&mut self.registers, &mut self.memory, operand1, operand2);
-        } else {
-            panic!("Invalid bit length");
         }
     }
 
@@ -75,13 +59,6 @@ impl<'a> CPU<'a> {
         // Execute the instruction
         self.execute_instruction(opcode);
     }
-    fn is_flag(&mut self, operand: &str, instr: &Instruction) -> bool {
-        return (operand.contains("Z") || operand.contains("NZ") || operand.contains("C"))
-            && (*instr == Instruction::JP
-                || *instr == Instruction::CALL
-                || *instr == Instruction::RET
-                || *instr == Instruction::JR);
-    }
 
     fn get_operand(&mut self, operand: &str, op_im: bool, instr: &Instruction) -> Operand {
         if operand.contains("16") {
@@ -95,7 +72,7 @@ impl<'a> CPU<'a> {
             // get the immediate value
             let imm = self.read_byte();
             Operand::Immediate(imm)
-        } else if self.is_flag(operand, instr) {
+        } else if is_flag(operand, instr) {
             Operand::Flag(match_string_to_flag(operand))
         } else {
             // get the immediate value
@@ -111,14 +88,14 @@ impl<'a> CPU<'a> {
 
     fn execute_instruction(&mut self, op: u8) {
         // take the hex string of op
-        let op = format!("0x{:02X}", op);
+        let op: String = format!("0x{:02X}", op);
         // print OPCODE
-        let a = self.opcodes["unprefixed"][&op].clone();
+        let a: JsonValue = self.opcodes["unprefixed"][op].clone();
 
         // get the instruction from the opcode
-        let instr = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
+        let instr: Instruction = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
 
-        let operands = &a["operands"];
+        let operands: &JsonValue = &a["operands"];
         let mut ops: [Operand; 2] = [Operand::NIL; 2];
         if operands.len() == 2 {
             // get the first operand
@@ -133,10 +110,7 @@ impl<'a> CPU<'a> {
             // let operand1 = Operand::Register(match_string_to_register(op1));
             let operand1 = self.get_operand(op1, op1_imm, &instr);
             // if op2_imm is true, then it is an immediate value
-
             let operand2 = self.get_operand(op2, op2_imm, &instr);
-            log::debug!("{:?} {:?},{:?} \n", instr, operand1, operand2);
-
             ops[0] = operand1;
             ops[1] = operand2;
         } else if operands.len() == 1 {
@@ -147,12 +121,10 @@ impl<'a> CPU<'a> {
             let instr = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
 
             let operand1 = self.get_operand(op1, op1_imm, &instr);
-
-            // imm
-            let imm: bool = operands[0]["immediate"].as_bool().unwrap();
-            log::debug!("{:?} {:?} \n", instr, operand1);
             ops[0] = operand1;
         }
+
+        log::debug!("{:?} {:?},{:?} \n", instr, ops[0], ops[1]);
 
         instr.match_instruction(&mut self.registers, &mut self.memory, &ops);
     }

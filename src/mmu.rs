@@ -1,4 +1,4 @@
-use super::ppu::PPU;
+use crate::ppu::PPU;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct MMU {
@@ -11,11 +11,7 @@ pub struct MMU {
     ext_ram: [u8; (0xBFFF - 0xA000) + 1],
     // Work ram WRAM(0xC000,0xDFFF)
     wram: [u8; (0xDFFF - 0xC000) + 1],
-    
-    // Echo ram (prohibited) 
-
-    
-    
+    // Echo ram (prohibited)
 }
 
 impl MMU {

@@ -1,18 +1,22 @@
-use gb::mmu::MMU;
-use gb::ppu::PPU;
-use std::fs;
-use std::io;
-mod gb;
-use gb::cpu::CPU;
+mod cpu;
+mod mmu;
+mod ppu;
+
+use cpu::CPU;
+use mmu::MMU;
 use sdl3::event::{self, Event};
 use sdl3::keyboard::Keycode;
 use sdl3::pixels::Color;
+use sdl3::render::WindowCanvas;
+use sdl3::EventPump;
+use std::fs;
+use std::io;
 use std::time::Duration;
 
 const WIDTH: u32 = 160;
 const HEIGHT: u32 = 144;
 
-fn create_window(cpu: &mut CPU) {
+fn create_window() -> (WindowCanvas, EventPump) {
     //
     let sdl_context = sdl3::init().unwrap();
 
@@ -29,29 +33,34 @@ fn create_window(cpu: &mut CPU) {
         .event_pump()
         .expect("Couldnt intialise event pump");
 
-    'running: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => {
-                    break 'running;
-                }
-
-                _ => {}
-            }
-        }
-        // Clear the canvas once per frame
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.clear();
-
-        canvas.present();
-
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-    }
+    (canvas, event_pump)
 }
+
+fn run_emu() {
+    // 'running: loop {
+    //     for event in event_pump.poll_iter() {
+    //         match event {
+    //             Event::Quit { .. }
+    //             | Event::KeyDown {
+    //                 keycode: Some(Keycode::Escape),
+    //                 ..
+    //             } => {
+    //                 break 'running;
+    //             }
+
+    //             _ => {}
+    //         }
+    //     }
+    //     // Clear the canvas once per frame
+    //     canvas.set_draw_color(Color::RGB(0, 0, 0));
+    //     canvas.clear();
+
+    //     canvas.present();
+
+    //     ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+    // }
+}
+
 pub fn main() {
     println!("Enter the path to the ROM file:");
     let mut rom_path = String::new();

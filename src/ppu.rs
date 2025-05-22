@@ -1,4 +1,4 @@
-use crate::gb::mmu::MMU;
+use crate::MMU;
 use sdl3::pixels::Color;
 use sdl3::rect::Point;
 use sdl3::render::WindowCanvas;

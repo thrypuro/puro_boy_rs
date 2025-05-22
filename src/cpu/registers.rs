@@ -1,4 +1,4 @@
-use super::{Flag, FlagNames, RegisterNames, Registers};
+use crate::cpu::shared::{Flag, FlagNames, RegisterNames, Registers};
 use core::panic;
 impl Flag {
     pub fn new() -> Self {
