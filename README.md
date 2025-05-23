@@ -12,16 +12,17 @@ cargo run --release
 ```
 
 ## Todo
-- [ ] Complete CPU
-	- [ ] Prefixed Operation
+- [x] Complete CPU
+	- [x] Prefixed Operation
 	- [x] Unprefixed Operation
 
 - [ ] MMU
 	- [ ] Cart File
 	- [ ] PPU
 	- [ ] IoRegister File
+	- [x] Initial Version of PPU (read correct address on bus)
 
-- [ ] Audio (Not started)
+- [ ] Audio
 
 - [ ] GUI for selecting ROM?
 

@@ -85,14 +85,14 @@ impl Instruction {
                 }
             },
             Instruction::JP => match operand2 {
-                Operand::NIL => jp(registers, memory, operand2, true),
+                Operand::NIL => jp(registers, memory, operand1, true),
                 _ => {
                     let condition = operand1.read(&registers, &memory) == 1;
                     jp(registers, memory, operand2, condition);
                 }
             },
             Instruction::JR => match operand2 {
-                Operand::NIL => jr(registers, memory, operand2, true),
+                Operand::NIL => jr(registers, memory, operand1, true),
                 _ => {
                     let condition = operand1.read(&registers, &memory) == 1;
                     jr(registers, memory, operand2, condition);
@@ -187,6 +187,55 @@ impl Instruction {
             _ => {
                 panic!("Unknown instruction: {:?}", self);
             }
+        }
+    }
+
+    pub fn match_prefix_instruction(
+        &self,
+        registers: &mut Registers,
+        memory: &mut MMU,
+        ops: &[Operand; 2],
+    ) {
+        let operand1 = ops[0];
+        let operand2 = ops[1];
+        match self {
+            Instruction::RLC => {
+                rlc(registers, memory, operand1);
+            }
+            Instruction::RRC => {
+                rrc(registers, memory, operand1);
+            }
+            Instruction::RL => {
+                rl(registers, memory, operand1);
+            }
+            Instruction::RR => {
+                rr(registers, memory, operand1);
+            }
+            Instruction::SLA => {
+                sla(registers, memory, operand1);
+            }
+            Instruction::SRA => {
+                sra(registers, memory, operand1);
+            }
+            Instruction::SWAP => {
+                swap(registers, memory, operand1);
+            }
+            Instruction::SRL => {
+                srl(registers, memory, operand1);
+            }
+            Instruction::BIT => {
+                let bit_position = operand1.read(registers, memory);
+                bit(registers, memory, operand2, bit_position);
+            }
+            Instruction::RES => {
+                let bit_position = operand1.read(registers, memory);
+                res(registers, memory, operand2, bit_position);
+            }
+            Instruction::SET => {
+                let bit_position = operand1.read(registers, memory);
+                set(registers, memory, operand2, bit_position);
+            }
+            _ => panic!("Unhandled CB-prefixed instruction: {:?}", self),
         }
     }
 }
@@ -637,6 +686,21 @@ pub fn set(registers: &mut Registers, memory: &mut MMU, operand: Operand, bit: u
 pub fn res(registers: &mut Registers, memory: &mut MMU, operand: Operand, bit: u8) {
     let value = operand.read(registers, memory);
     let result = value & !(1 << bit);
+
+    // Write result back to the operand
+    operand.write(result, registers, memory);
+}
+
+// Shift right logical
+pub fn srl(registers: &mut Registers, memory: &mut MMU, operand: Operand) {
+    let value = operand.read(registers, memory);
+    let result = value >> 1;
+
+    // Set flags
+    registers.flag.z = result == 0;
+    registers.flag.n = false;
+    registers.flag.h = false;
+    registers.flag.c = (value & 0x01) != 0;
 
     // Write result back to the operand
     operand.write(result, registers, memory);
