@@ -76,8 +76,25 @@ pub enum Instruction {
     RET,
     RETI,
     RST,
+
     // Other instructions
     DI,
+
+    // PREFIX instruction (0xCB)
+    PREFIX,
+
+    // CB Prefixed instructions
+    RLC,
+    RRC,
+    RL,
+    RR,
+    SLA,
+    SRA,
+    SRL,
+    SWAP,
+    BIT,
+    RES,
+    SET,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -135,7 +152,37 @@ pub fn match_string_to_instruction(instr: &str) -> Instruction {
         "CALL" => Instruction::CALL,
         "RET" => Instruction::RET,
         "DI" => Instruction::DI,
+        "PREFIX" => Instruction::PREFIX,
+        // CB Prefixed instructions
+        "RLC" => Instruction::RLC,
+        "RRC" => Instruction::RRC,
+        "RL" => Instruction::RL,
+        "RR" => Instruction::RR,
+        "SLA" => Instruction::SLA,
+        "SRA" => Instruction::SRA,
+        "SRL" => Instruction::SRL,
+        "SWAP" => Instruction::SWAP,
+        "BIT" => Instruction::BIT,
+        "RES" => Instruction::RES,
+        "SET" => Instruction::SET,
         _ => panic!("Unknown instruction: {}", instr),
+    }
+}
+
+pub fn match_string_preinstruction(instr: &str) -> Instruction {
+    match instr {
+        "RLC" => Instruction::RLC,
+        "RRC" => Instruction::RRC,
+        "RL" => Instruction::RL,
+        "RR" => Instruction::RR,
+        "SLA" => Instruction::SLA,
+        "SRA" => Instruction::SRA,
+        "SWAP" => Instruction::SWAP,
+        "SRL" => Instruction::SRL,
+        "BIT" => Instruction::BIT,
+        "RES" => Instruction::RES,
+        "SET" => Instruction::SET,
+        _ => panic!("Unknown CB-prefixed instruction: {}", instr),
     }
 }
 

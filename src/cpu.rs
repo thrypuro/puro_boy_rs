@@ -3,12 +3,12 @@ mod registers;
 mod shared;
 
 use crate::MMU;
-use instructions::*;
 use json::{self, JsonValue};
 use log;
 use shared::{
-    get_opcodes, is_flag, match_string_to_flag, match_string_to_instruction,
-    match_string_to_register, Instruction, Operand, RegisterNames, Registers,
+    get_opcodes, is_flag, match_string_preinstruction, match_string_to_flag,
+    match_string_to_instruction, match_string_to_register, Instruction, Operand, RegisterNames,
+    Registers,
 };
 
 pub struct CPU<'a> {
@@ -54,8 +54,8 @@ impl<'a> CPU<'a> {
         // Fetch the opcode from memory
         let opcode = self.read_byte();
 
-        log::debug!("Opcode : {:02X}", opcode);
-        log::debug!("Program counter : {:02X}", self.registers.pc);
+        // log::debug!("Opcode : {:02X}", opcode);
+        // log::debug!("Program counter : {:02X}", self.registers.pc);
         // Execute the instruction
         self.execute_instruction(opcode);
     }
@@ -87,6 +87,12 @@ impl<'a> CPU<'a> {
     }
 
     fn execute_instruction(&mut self, op: u8) {
+        // Check if it's a prefixed instruction (0xCB)
+        if op == 0xCB {
+            self.execute_prefixed_instruction();
+            return;
+        }
+
         // take the hex string of op
         let op: String = format!("0x{:02X}", op);
         // print OPCODE
@@ -94,6 +100,12 @@ impl<'a> CPU<'a> {
 
         // get the instruction from the opcode
         let instr: Instruction = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
+
+        // Check for PREFIX instruction (0xCB)
+        if instr == Instruction::PREFIX {
+            self.execute_prefixed_instruction();
+            return;
+        }
 
         let operands: &JsonValue = &a["operands"];
         let mut ops: [Operand; 2] = [Operand::NIL; 2];
@@ -124,9 +136,80 @@ impl<'a> CPU<'a> {
             ops[0] = operand1;
         }
 
-        log::debug!("{:?} {:?},{:?} \n", instr, ops[0], ops[1]);
+        // For debugging
+        match ops[1] {
+            Operand::NIL => match ops[0] {
+                Operand::NIL => log::debug!("{:?} \n", instr),
+                _ => log::debug!("{:?} {:?} \n", instr, ops[0]),
+            },
+            _ => {
+                log::debug!("{:?} {:?},{:?} \n", instr, ops[0], ops[1])
+            }
+        }
 
         instr.match_instruction(&mut self.registers, &mut self.memory, &ops);
+    }
+
+    fn execute_prefixed_instruction(&mut self) {
+        // Read the second byte of the prefixed instruction
+        let op = self.read_byte();
+        let op_str = format!("0x{:02X}", op);
+
+        // Get the instruction from the prefixed opcodes
+        let a: JsonValue = self.opcodes["cbprefixed"][op_str].clone();
+        let instr_str = (&a["mnemonic"]).as_str().unwrap();
+
+        // Match the CB prefixed instruction
+        let instr = match_string_preinstruction(instr_str);
+
+        // Process operands
+        let operands: &JsonValue = &a["operands"];
+        let mut ops: [Operand; 2] = [Operand::NIL; 2];
+
+        if operands.len() == 2 {
+            let op1 = &operands[0]["name"].as_str().unwrap();
+            let op1_imm: bool = operands[0]["immediate"].as_bool().unwrap();
+            let op2 = &operands[1]["name"].as_str().unwrap();
+            let op2_imm: bool = operands[1]["immediate"].as_bool().unwrap();
+
+            let operand1 = if op1.contains("bit") {
+                // For BIT, SET, RES instructions, first operand is bit number
+                let bit_num = op1[3..].parse::<u8>().unwrap();
+                Operand::Immediate(bit_num)
+            } else {
+                self.get_operand(op1, op1_imm, &instr)
+            };
+
+            let operand2 = self.get_operand(op2, op2_imm, &instr);
+            ops[0] = operand1;
+            ops[1] = operand2;
+        } else if operands.len() == 1 {
+            let op1 = &operands[0]["name"].as_str().unwrap();
+            let op1_imm: bool = operands[0]["immediate"].as_bool().unwrap();
+
+            let operand1 = self.get_operand(op1, op1_imm, &instr);
+            ops[0] = operand1;
+        }
+
+        log::debug!("CB Prefixed: {:?} {:?},{:?}\n", instr, ops[0], ops[1]);
+
+        // Execute the CB prefixed instruction
+        // match instr {
+        //     Instruction::RLC => self.execute_rlc(&ops),
+        //     Instruction::RRC => self.execute_rrc(&ops),
+        //     Instruction::RL => self.execute_rl(&ops),
+        //     Instruction::RR => self.execute_rr(&ops),
+        //     Instruction::SLA => self.execute_sla(&ops),
+        //     Instruction::SRA => self.execute_sra(&ops),
+        //     Instruction::SWAP => self.execute_swap(&ops),
+        //     Instruction::SRL => self.execute_srl(&ops),
+        //     Instruction::BIT => self.execute_bit(&ops),
+        //     Instruction::RES => self.execute_res(&ops),
+        //     Instruction::SET => self.execute_set(&ops),
+        //     _ => panic!("Unhandled CB-prefixed instruction: {:?}", instr),
+        // }
+        //
+        instr.match_prefix_instruction(&mut self.registers, &mut self.memory, &ops);
     }
 
     pub fn print_registers(&self) {
