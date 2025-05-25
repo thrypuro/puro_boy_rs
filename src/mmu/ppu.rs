@@ -88,7 +88,6 @@ pub struct PPU {
 
     // Flag to indicate if a frame is ready to be rendered
     frame_ready: bool,
-    // Optional canvas for rendering (for testing purposes)
 }
 
 impl PPU {

@@ -21,6 +21,7 @@ cargo run --release
 	- [ ] PPU
 	- [ ] IoRegister File
 	- [x] Initial Version of PPU (read correct address on bus)
+	- [ ] Rom bank implementation
 
 - [ ] Audio
 
