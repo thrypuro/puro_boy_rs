@@ -1,3 +1,4 @@
+// Shared structs, enums between all
 use json;
 
 pub const DEB: bool = true;

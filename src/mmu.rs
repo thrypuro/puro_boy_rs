@@ -1,6 +1,6 @@
-mod cart;
-mod ioreg;
+mod bank;
 mod ppu;
+mod shared;
 
 use ppu::PPU;
 
@@ -29,12 +29,13 @@ pub struct MMU {
     eram: [u8; ECHO_RAM_SIZE],
     // OAM - Sprite Attribute Table (0xFE00-0xFE9F)
     oam: [u8; OAM_SIZE],
-    // I/O Registers (0xFF00-0xFF7F)
-    io_registers: [u8; IO_REGISTERS_SIZE],
+
     // High RAM (0xFF80-0xFFFE)
     hram: [u8; HRAM_SIZE],
     // Interrupt Enable Register (0xFFFF)
     ie_register: u8,
+    // I/O Registers (0xFF00-0xFF7F) Putting this in the PPU
+
     // PPU
     pub ppu: PPU,
 }
@@ -66,7 +67,6 @@ impl MMU {
             wram: [0; WRAM_SIZE],
             eram: [0; ECHO_RAM_SIZE],
             oam: [0; OAM_SIZE],
-            io_registers: [0; IO_REGISTERS_SIZE],
             hram: [0; HRAM_SIZE],
             ie_register: 0,
             ppu: PPU::new(),
@@ -98,7 +98,7 @@ impl MMU {
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize], // Echo RAM, mirrors WRAM
             0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize],
             0xFEA0..=0xFEFF => 0, // Unusable memory
-            0xFF00..=0xFF7F => self.io_registers[(address - 0xFF00) as usize],
+            0xFF00..=0xFF7F => 0, // self.io_registers[(address - 0xFF00) as usize],
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
             0xFFFF => self.ie_register,
         }
@@ -125,22 +125,22 @@ impl MMU {
             0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = value,
             0xFEA0..=0xFEFF => {} // Unusable memory, ignore writes
             0xFF00..=0xFF7F => {
-                self.io_registers[(address - 0xFF00) as usize] = value;
-                // Special handling for specific I/O registers
-                match address {
-                    0xFF40 => self.ppu.update_lcd_control(value),
-                    0xFF41 => self.ppu.update_lcd_status(value),
-                    0xFF42 => self.ppu.set_scroll_y(value),
-                    0xFF43 => self.ppu.set_scroll_x(value),
-                    0xFF44 => {} // LY - read only
-                    0xFF45 => self.ppu.set_ly_compare(value),
-                    0xFF47 => self.ppu.set_bg_palette(value),
-                    0xFF48 => self.ppu.set_obj_palette0(value),
-                    0xFF49 => self.ppu.set_obj_palette1(value),
-                    0xFF4A => self.ppu.set_window_y(value),
-                    0xFF4B => self.ppu.set_window_x(value),
-                    _ => {}
-                }
+                // self.io_registers[(address - 0xFF00) as usize] = value;
+                // // Special handling for specific I/O registers
+                // match address {
+                //     0xFF40 => self.ppu.update_lcd_control(value),
+                //     0xFF41 => self.ppu.update_lcd_status(value),
+                //     0xFF42 => self.ppu.set_scroll_y(value),
+                //     0xFF43 => self.ppu.set_scroll_x(value),
+                //     0xFF44 => {} // LY - read only
+                //     0xFF45 => self.ppu.set_ly_compare(value),
+                //     0xFF47 => self.ppu.set_bg_palette(value),
+                //     0xFF48 => self.ppu.set_obj_palette0(value),
+                //     0xFF49 => self.ppu.set_obj_palette1(value),
+                //     0xFF4A => self.ppu.set_window_y(value),
+                //     0xFF4B => self.ppu.set_window_x(value),
+                //     _ => {}
+                // }
             }
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => self.ie_register = value,
