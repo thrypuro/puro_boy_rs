@@ -31,24 +31,26 @@ impl<'a> CPU<'a> {
         }
     }
 
-    // read word from rom
+    // read word at pc
     fn read_word(&mut self) -> u16 {
-        let low = self.memory.read_rom(self.registers.pc);
-        let high = self.memory.read_rom(self.registers.pc + 1);
+        let low = self.memory.read(self.registers.pc).expect("fetch");
+        let high = self.memory.read(self.registers.pc + 1).expect("fetch");
         self.registers.pc += 2;
         ((high as u16) << 8) | (low as u16)
     }
 
-    // read byte from rom
+    // read byte at pc
     fn read_byte(&mut self) -> u8 {
-        let byte = self.memory.read_rom(self.registers.pc);
+        let byte = self.memory.read(self.registers.pc).expect("fetch");
         self.registers.pc += 1;
         byte
     }
 
-    pub fn step(&mut self) {
+    /// Executes one instruction (or services one interrupt) and returns the
+    /// number of T-cycles it took (NOP = 4).
+    pub fn step(&mut self) -> u8 {
         if self.halted {
-            return;
+            return 0;
         }
 
         // Fetch the opcode from memory
@@ -58,6 +60,7 @@ impl<'a> CPU<'a> {
         log::debug!("Program counter : {:02X}", self.registers.pc);
         // Execute the instruction
         self.execute_instruction(opcode);
+        0 // TODO: return the real cycle count
     }
 
     fn get_operand(&mut self, operand: &str, op_im: bool, instr: &Instruction) -> Operand {
@@ -188,9 +191,5 @@ impl<'a> CPU<'a> {
     }
 }
 
-// tests
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-// }
+#[cfg(test)]
+mod tests;

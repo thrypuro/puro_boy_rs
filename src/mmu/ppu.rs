@@ -22,7 +22,7 @@ pub struct PPU {
 }
 
 impl PPU {
-    pub fn new(mmu: &MMU) -> Self {
+    pub fn new() -> Self {
         PPU {
             tiles: Vec::new(),
             tilemap: [[0; 32]; 32],
@@ -35,6 +35,24 @@ impl PPU {
     }
 
     pub fn turn_lcd_on(&mut self) {}
+
+    /// Reads VRAM (0x8000-0x9FFF), OAM (0xFE00-0xFE9F) or an LCD register (0xFF40-0xFF4B).
+    pub fn read(&self, address: u16) -> u8 {
+        todo!("PPU::read")
+    }
+    /// Writes VRAM (0x8000-0x9FFF), OAM (0xFE00-0xFE9F) or an LCD register (0xFF40-0xFF4B).
+    pub fn write(&mut self, address: u16, value: u8) {
+        todo!("PPU::write")
+    }
+    /// Advances the PPU by `cycles` T-cycles. Returns the interrupts it requests,
+    /// using the IF bit layout: bit 0 = VBlank, bit 1 = STAT.
+    pub fn tick(&mut self, cycles: u8) -> u8 {
+        todo!("PPU::tick")
+    }
+    /// 160x144 shades (0 = white .. 3 = black) after palettes are applied, row-major.
+    pub fn framebuffer(&self) -> &[u8] {
+        todo!("PPU::framebuffer")
+    }
 }
 
 pub fn render_tile(tile: [[u8; 8]; 8], canvas: &mut WindowCanvas, position: Point) {
@@ -89,32 +107,4 @@ pub fn get_tile(t1: &[u8]) -> [[u8; 8]; 8] {
 // }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pixel() {
-        assert_eq!(get_pixelrow(0x7c, 0x7c), [0, 3, 3, 3, 3, 3, 0, 0]);
-    }
-
-    #[test]
-    fn get_pixel_a() {
-        let a = [
-            0x7C, 0x7C, 0x00, 0xC6, 0xC6, 0x00, 0x00, 0xFE, 0xC6, 0xC6, 0x00, 0xC6, 0xC6, 0x00,
-            0x00, 0x00,
-        ];
-        assert_eq!(
-            get_tile(&a),
-            [
-                [0, 3, 3, 3, 3, 3, 0, 0],
-                [2, 2, 0, 0, 0, 2, 2, 0],
-                [1, 1, 0, 0, 0, 1, 1, 0],
-                [2, 2, 2, 2, 2, 2, 2, 0],
-                [3, 3, 0, 0, 0, 3, 3, 0],
-                [2, 2, 0, 0, 0, 2, 2, 0],
-                [1, 1, 0, 0, 0, 1, 1, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0]
-            ]
-        );
-    }
-}
+mod tests;

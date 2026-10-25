@@ -196,7 +196,7 @@ impl Operand {
     pub fn read(&self, registers: &Registers, memory: &MMU) -> u8 {
         match self {
             Operand::Register(reg) => registers.get_register_value_8(*reg),
-            Operand::Memory(addr) => memory.read(*addr),
+            Operand::Memory(addr) => memory.read(*addr).expect("MMU read"),
             Operand::Immediate(value) => *value,
             Operand::Flag(flag) => registers.get_flag(flag) as u8,
             _ => panic!("Invalid operand for read"),
@@ -206,14 +206,14 @@ impl Operand {
     pub fn write(&self, value: u8, registers: &mut Registers, memory: &mut MMU) {
         match self {
             Operand::Register(reg) => registers.set_register_value_8(*reg, value),
-            Operand::Memory(addr) => memory.write(*addr, value),
+            Operand::Memory(addr) => memory.write(*addr, value).expect("MMU write"),
             _ => panic!("Invalid operand for write"),
         }
     }
     pub fn write_u16(&self, value: u16, registers: &mut Registers, memory: &mut MMU) {
         match self {
             Operand::Register(reg) => registers.set_register_value_16(*reg, value),
-            Operand::Memory(addr) => memory.write(*addr, value as u8),
+            Operand::Memory(addr) => memory.write(*addr, value as u8).expect("MMU write"),
 
             _ => panic!("Invalid register for 16-bit write {:?}", self),
         }
@@ -222,7 +222,7 @@ impl Operand {
         match self {
             Operand::Register(reg) => registers.get_register_value_16(*reg),
             Operand::Immediate16(value) => *value,
-            Operand::Memory(addr) => memory.read(*addr) as u16,
+            Operand::Memory(addr) => memory.read(*addr).expect("MMU read") as u16,
             _ => panic!("Invalid register for 16-bit read {:?}", self),
         }
     }
@@ -493,7 +493,7 @@ pub fn ldh(registers: &mut Registers, operand1: Operand, operand2: Operand, memo
                 _ => panic!("Invalid operand for LDH instruction"),
             };
             let addr = 0xFF00 + offset;
-            let value = memory.read(addr);
+            let value = memory.read(addr).expect("MMU read");
             registers.set_register_value_8(RegisterNames::A, value);
             return;
         }
@@ -506,7 +506,7 @@ pub fn ldh(registers: &mut Registers, operand1: Operand, operand2: Operand, memo
 
     // Store the value from register A to the high memory address
     let value = registers.get_register_value_8(RegisterNames::A);
-    memory.write(addr, value);
+    memory.write(addr, value).expect("MMU write");
 }
 
 // rlc : rotate left circular
@@ -658,7 +658,7 @@ pub fn call(registers: &mut Registers, memory: &mut MMU, operand: Operand, condi
         let pc = &mut registers.pc;
         let sp = &mut registers.sp;
         *sp = sp.wrapping_sub(2);
-        memory.write_word(*sp, *pc);
+        memory.write_word(*sp, *pc).expect("MMU write");
         *pc = address;
     }
 }
@@ -675,8 +675,8 @@ pub fn ret(registers: &mut Registers, memory: &mut MMU, cond: bool) {
     // Pop the address from the stack and set it as the new program counter
     if cond {
         let sp = &mut registers.sp;
-        let low = memory.read(*sp);
-        let high = memory.read(*sp + 1);
+        let low = memory.read(*sp).expect("MMU read");
+        let high = memory.read(*sp + 1).expect("MMU read");
         let pc = &mut registers.pc;
         *pc = ((high as u16) << 8) | (low as u16);
         *sp = sp.wrapping_add(2);
@@ -745,12 +745,12 @@ pub fn push(registers: &mut Registers, memory: &mut MMU, operand: Operand) {
     let value = operand.read_16(registers, memory);
     let sp = &mut registers.sp;
     *sp = sp.wrapping_sub(2);
-    memory.write_word(*sp, value);
+    memory.write_word(*sp, value).expect("MMU write");
 }
 
 pub fn pop(registers: &mut Registers, memory: &mut MMU, operand: Operand) {
     let sp = &mut registers.sp;
-    let value = memory.read_word(*sp);
+    let value = memory.read_word(*sp).expect("MMU read");
     *sp = sp.wrapping_add(2);
     operand.write_u16(value, registers, memory);
 }

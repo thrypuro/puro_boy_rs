@@ -1,4 +1,5 @@
 mod cpu;
+mod error;
 mod mmu;
 
 use cpu::CPU;
