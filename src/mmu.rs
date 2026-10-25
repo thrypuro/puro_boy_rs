@@ -1,4 +1,3 @@
-mod cart;
 mod ioreg;
 mod ppu;
 
@@ -83,7 +82,7 @@ impl MMU {
         // println!("ram is {}", self.ram[address as usize]);
         let addr = address as usize;
         match address {
-            0..=0x7FFF => {} // Rom is immutable
+            0x0000..=0x7FFF => {} // Rom is immutable
             0x8000..=0x9FFF => {}
             0xA000..=0xBFFF => self.ext_ram[addr - 0xA000] = value,
             0xC000..=0xDFFF => {

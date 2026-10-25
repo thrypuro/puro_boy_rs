@@ -283,7 +283,11 @@ mod stat {
         run(&mut ppu, 4); // mode 2, LY != LYC
         ppu.write(STAT, 0xFF);
         assert_eq!(ppu.read(STAT) & 0b111, 0b010);
-        assert_eq!(ppu.read(STAT) & 0b0111_1000, 0b0111_1000, "enable bits are writable");
+        assert_eq!(
+            ppu.read(STAT) & 0b0111_1000,
+            0b0111_1000,
+            "enable bits are writable"
+        );
     }
 
     #[test]
@@ -560,7 +564,7 @@ mod sprites {
     fn sprite_colour_0_is_transparent() {
         let mut ppu = ppu_with(BG_ON | TILES_8000 | OBJ_ON);
         write_solid_tile(&mut ppu, 0x8000, 1); // bg is all colour 1
-        // tile 2 left as all zeroes
+                                               // tile 2 left as all zeroes
         write_sprite(&mut ppu, 0, 16, 8, 2, 0);
         run(&mut ppu, CYCLES_PER_FRAME);
         assert_eq!(pixel(&ppu, 0, 0), 1);

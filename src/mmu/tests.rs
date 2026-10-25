@@ -233,8 +233,14 @@ mod prohibited {
     #[test]
     fn write_word_reports_word_error() {
         let mut mmu = blank_mmu();
-        assert_eq!(mmu.write_word(0xFEA0, 1), Err(EmuError::ProhibitedWriteWord));
-        assert_eq!(mmu.write_word(0xDFFF, 1), Err(EmuError::ProhibitedWriteWord));
+        assert_eq!(
+            mmu.write_word(0xFEA0, 1),
+            Err(EmuError::ProhibitedWriteWord)
+        );
+        assert_eq!(
+            mmu.write_word(0xDFFF, 1),
+            Err(EmuError::ProhibitedWriteWord)
+        );
     }
 
     #[test]
@@ -255,7 +261,7 @@ mod dma {
             mmu.write(0xC100 + i, i as u8)?;
         }
         mmu.write(0xFF46, 0xC1)?; // source = 0xC100
-        // Real DMA takes 640 cycles; doing it instantly is fine to start with.
+                                  // Real DMA takes 640 cycles; doing it instantly is fine to start with.
         run(&mut mmu, 640);
         for i in 0..0xA0u16 {
             assert_eq!(mmu.read(0xFE00 + i)?, i as u8, "OAM byte {i}");

@@ -50,16 +50,24 @@ fn set16(cpu: &mut CPU, reg: RegisterNames, value: u16) {
 }
 // Memory helpers: a failed access is a bug in the MMU, so they panic with the address.
 fn read(cpu: &CPU, addr: u16) -> u8 {
-    cpu.memory.read(addr).unwrap_or_else(|e| panic!("read {addr:#06X}: {e:?}"))
+    cpu.memory
+        .read(addr)
+        .unwrap_or_else(|e| panic!("read {addr:#06X}: {e:?}"))
 }
 fn write(cpu: &mut CPU, addr: u16, value: u8) {
-    cpu.memory.write(addr, value).unwrap_or_else(|e| panic!("write {addr:#06X}: {e:?}"))
+    cpu.memory
+        .write(addr, value)
+        .unwrap_or_else(|e| panic!("write {addr:#06X}: {e:?}"))
 }
 fn read_word(cpu: &CPU, addr: u16) -> u16 {
-    cpu.memory.read_word(addr).unwrap_or_else(|e| panic!("read_word {addr:#06X}: {e:?}"))
+    cpu.memory
+        .read_word(addr)
+        .unwrap_or_else(|e| panic!("read_word {addr:#06X}: {e:?}"))
 }
 fn write_word(cpu: &mut CPU, addr: u16, value: u16) {
-    cpu.memory.write_word(addr, value).unwrap_or_else(|e| panic!("write_word {addr:#06X}: {e:?}"))
+    cpu.memory
+        .write_word(addr, value)
+        .unwrap_or_else(|e| panic!("write_word {addr:#06X}: {e:?}"))
 }
 /// (Z, N, H, C)
 fn flags(cpu: &CPU) -> (bool, bool, bool, bool) {
@@ -734,7 +742,10 @@ mod control_flow {
     fn jr_forward() {
         with_cpu(&[0x18, 0x05], |cpu| {
             assert_eq!(cpu.step(), 12);
-            assert_eq!(cpu.registers.pc, 0x0107, "relative to the *next* instruction");
+            assert_eq!(
+                cpu.registers.pc, 0x0107,
+                "relative to the *next* instruction"
+            );
         });
     }
 
@@ -1009,7 +1020,9 @@ mod cycles {
             let expected = expected_cycles(op);
             match cycles_for(&program) {
                 Ok(c) if c == expected => {}
-                Ok(c) => failures.push(format!("0x{code:02X} {mnemonic}: got {c}, want {expected}")),
+                Ok(c) => {
+                    failures.push(format!("0x{code:02X} {mnemonic}: got {c}, want {expected}"))
+                }
                 Err(e) => failures.push(format!("0x{code:02X} {mnemonic}: panicked: {e}")),
             }
         }
@@ -1160,7 +1173,10 @@ mod halt {
             write(cpu, IF, 0x01);
             cpu.step();
             assert!(!cpu.halted);
-            assert_eq!(cpu.registers.pc, 0x0102, "continued with the NOP after HALT");
+            assert_eq!(
+                cpu.registers.pc, 0x0102,
+                "continued with the NOP after HALT"
+            );
         });
     }
 
