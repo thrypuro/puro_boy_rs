@@ -12,17 +12,17 @@
 
 use super::*;
 
-const LCDC: u16 = 0xFF40;
-const STAT: u16 = 0xFF41;
-const SCY: u16 = 0xFF42;
-const SCX: u16 = 0xFF43;
-const LY: u16 = 0xFF44;
-const LYC: u16 = 0xFF45;
-const BGP: u16 = 0xFF47;
-const OBP0: u16 = 0xFF48;
-const OBP1: u16 = 0xFF49;
-const WY: u16 = 0xFF4A;
-const WX: u16 = 0xFF4B;
+const LCDC: usize = 0xFF40;
+const STAT: usize = 0xFF41;
+const SCY: usize = 0xFF42;
+const SCX: usize = 0xFF43;
+const LY: usize = 0xFF44;
+const LYC: usize = 0xFF45;
+const BGP: usize = 0xFF47;
+const OBP0: usize = 0xFF48;
+const OBP1: usize = 0xFF49;
+const WY: usize = 0xFF4A;
+const WX: usize = 0xFF4B;
 
 const CYCLES_PER_LINE: u32 = 456;
 const CYCLES_PER_FRAME: u32 = CYCLES_PER_LINE * 154; // 70224
@@ -62,7 +62,7 @@ fn pixel(ppu: &PPU, x: usize, y: usize) -> u8 {
 }
 
 /// Writes a tile where every pixel has colour index `colour` (0-3) at `addr`.
-fn write_solid_tile(ppu: &mut PPU, addr: u16, colour: u8) {
+fn write_solid_tile(ppu: &mut PPU, addr: usize, colour: u8) {
     let lo = if colour & 1 != 0 { 0xFF } else { 0x00 };
     let hi = if colour & 2 != 0 { 0xFF } else { 0x00 };
     for row in 0..8 {
@@ -72,7 +72,7 @@ fn write_solid_tile(ppu: &mut PPU, addr: u16, colour: u8) {
 }
 
 /// Writes a tile whose left column is colour 3 and the rest colour 0. Useful for flips/scroll.
-fn write_left_stripe_tile(ppu: &mut PPU, addr: u16) {
+fn write_left_stripe_tile(ppu: &mut PPU, addr: usize) {
     for row in 0..8 {
         ppu.write(addr + row * 2, 0b1000_0000);
         ppu.write(addr + row * 2 + 1, 0b1000_0000);
@@ -89,7 +89,7 @@ fn ppu_with(lcdc: u8) -> PPU {
     ppu
 }
 
-fn write_sprite(ppu: &mut PPU, index: u16, y: u8, x: u8, tile: u8, flags: u8) {
+fn write_sprite(ppu: &mut PPU, index: usize, y: u8, x: u8, tile: u8, flags: u8) {
     let base = 0xFE00 + index * 4;
     ppu.write(base, y);
     ppu.write(base + 1, x);

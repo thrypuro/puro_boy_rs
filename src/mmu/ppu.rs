@@ -1,4 +1,4 @@
-use crate::MMU;
+use crate::error::{EmuError, EmuRes};
 use sdl3::pixels::Color;
 use sdl3::rect::Point;
 use sdl3::render::WindowCanvas;
@@ -10,6 +10,11 @@ pub const GAMEBOY_COLORS: [sdl3::pixels::Color; 4] = [
     Color::RGB(0, 0, 0),
 ];
 
+const VRAM_SIZE: usize = 0x2000;
+const OAM_SIZE: usize = (0xFE9F - 0xFE00) + 1;
+
+const VRAM_START: usize = 0x8000;
+const OAM_START: usize = 0xFE00;
 #[derive(Debug, PartialEq, Eq)]
 pub struct Tile {
     pub data: [[u8; 8]; 8],
@@ -19,6 +24,10 @@ pub struct PPU {
     pub tiles: Vec<Tile>,
     tilemap: [[u8; 32]; 32],
     scan_line: u8,
+    // Vram to store the pixel
+    vram: [u8; VRAM_SIZE],
+    // Object Attribute Memory
+    oam: [u8; OAM_SIZE],
 }
 
 impl PPU {
@@ -27,6 +36,8 @@ impl PPU {
             tiles: Vec::new(),
             tilemap: [[0; 32]; 32],
             scan_line: 0,
+            vram: [0u8; VRAM_SIZE],
+            oam: [0u8; OAM_SIZE],
         }
     }
 
@@ -37,12 +48,20 @@ impl PPU {
     pub fn turn_lcd_on(&mut self) {}
 
     /// Reads VRAM (0x8000-0x9FFF), OAM (0xFE00-0xFE9F) or an LCD register (0xFF40-0xFF4B).
-    pub fn read(&self, address: u16) -> u8 {
-        todo!("PPU::read")
+    pub fn read(&self, address: usize) -> u8 {
+        match address {
+            0x8000..=0x9FFF => self.vram[address - VRAM_START],
+            0xFE00..=0xFE9F => self.oam[address - OAM_START],
+            _ => 0, // Should never get here
+        }
     }
     /// Writes VRAM (0x8000-0x9FFF), OAM (0xFE00-0xFE9F) or an LCD register (0xFF40-0xFF4B).
-    pub fn write(&mut self, address: u16, value: u8) {
-        todo!("PPU::write")
+    pub fn write(&mut self, address: usize, value: u8) {
+        match address {
+            0x8000..=0x9FFF => self.vram[address - VRAM_START] = value,
+            0xFE00..=0xFE9F => self.oam[address - OAM_START] = value,
+            _ => {} // Should never get here
+        }
     }
     /// Advances the PPU by `cycles` T-cycles. Returns the interrupts it requests,
     /// using the IF bit layout: bit 0 = VBlank, bit 1 = STAT.
