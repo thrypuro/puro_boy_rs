@@ -24,20 +24,14 @@ cargo test --release blargg -- --ignored --nocapture   # real test ROMs
 ```
 
 ## Todo
-- [ ] Complete CPU
-	- [ ] Prefixed Operation
-	- [x] Unprefixed Operation
-
-- [ ] MMU
-	- [ ] Cart File
-	- [ ] PPU
-	- [ ] IoRegister File
-
 - [ ] Audio (Not started)
-
 - [ ] GUI for selecting ROM?
 
 ## Screenshots
+### Tetris
+![](image.png)
+### Pokemon Red
+![](image_1.png)
 
 ## References
 - `opcodes.json` is taken from [here](https://gbdev.io/gb-opcodes/Opcodes.json)
