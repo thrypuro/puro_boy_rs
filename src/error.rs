@@ -6,6 +6,7 @@ pub enum EmuError {
     ProhibitedWrite,
     ProhibitedWriteWord,
 
+    // Rom related Operations
     RomNotInitialised,
 }
 
