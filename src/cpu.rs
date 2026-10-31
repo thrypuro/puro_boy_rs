@@ -1,192 +1,230 @@
-mod instructions;
+mod alu;
+mod execute;
 mod registers;
 mod shared;
 
 use crate::MMU;
-use instructions::*;
-use json::{self, JsonValue};
-use log;
-use shared::{
-    get_opcodes, is_flag, match_string_to_flag, match_string_to_instruction,
-    match_string_to_register, Instruction, Operand, RegisterNames, Registers,
-};
+use shared::{RegisterNames, Registers};
+
+const IF_ADDR: u16 = 0xFF0F;
+const IE_ADDR: u16 = 0xFFFF;
+
+/// 8-bit register operand encoding used by the opcode table:
+/// 0=B 1=C 2=D 3=E 4=H 5=L 6=(HL) 7=A. Index 6 is memory and never looked up here.
+const R8: [RegisterNames; 8] = [
+    RegisterNames::B,
+    RegisterNames::C,
+    RegisterNames::D,
+    RegisterNames::E,
+    RegisterNames::H,
+    RegisterNames::L,
+    RegisterNames::HL,
+    RegisterNames::A,
+];
 
 pub struct CPU<'a> {
     registers: Registers,
     pub memory: &'a mut MMU,
     halted: bool,
-    opcodes: json::JsonValue,
-    ime: bool, // Interrupt Master Enable flag
+    /// Interrupt Master Enable flag.
+    ime: bool,
+    /// EI only sets IME after the *following* instruction. This counts the steps left
+    /// until that happens (0 = nothing pending).
+    ei_delay: u8,
 }
 
 impl<'a> CPU<'a> {
-    /// Creates a new CPU instance with the given ROM data.
+    /// Creates a CPU in the state the DMG boot ROM leaves it in (PC = 0x0100).
     pub fn new(mmu: &'a mut MMU) -> Self {
         Self {
             registers: Registers::new(),
             memory: mmu,
             halted: false,
-            opcodes: get_opcodes(),
             ime: false,
+            ei_delay: 0,
         }
     }
 
-    // read word at pc
-    fn read_word(&mut self) -> u16 {
-        let low = self.memory.read(self.registers.pc).expect("fetch");
-        let high = self.memory.read(self.registers.pc + 1).expect("fetch");
-        self.registers.pc += 2;
-        ((high as u16) << 8) | (low as u16)
+    /// Services one pending interrupt, or executes one instruction, and returns the
+    /// number of T-cycles it took (NOP = 4).
+    pub fn step(&mut self) -> u8 {
+        let pending = self.pending_interrupts();
+
+        if self.halted {
+            if pending == 0 {
+                return 4;
+            }
+            // Any pending interrupt wakes the CPU, even with IME clear.
+            self.halted = false;
+        }
+
+        if self.ime && pending != 0 {
+            return self.service_interrupt(pending);
+        }
+
+        let opcode = self.fetch8();
+        log::trace!("{:04X}: {:02X}", self.registers.pc.wrapping_sub(1), opcode);
+        let cycles = self.execute(opcode);
+
+        if self.ei_delay > 0 {
+            self.ei_delay -= 1;
+            if self.ei_delay == 0 {
+                self.ime = true;
+            }
+        }
+        cycles
     }
 
-    // read byte at pc
-    fn read_byte(&mut self) -> u8 {
-        let byte = self.memory.read(self.registers.pc).expect("fetch");
-        self.registers.pc += 1;
+    /// Interrupts that are both requested (IF) and enabled (IE).
+    fn pending_interrupts(&mut self) -> u8 {
+        self.read8(IE_ADDR) & self.read8(IF_ADDR) & 0x1F
+    }
+
+    /// Jumps to the vector of the highest-priority (lowest bit) pending interrupt.
+    fn service_interrupt(&mut self, pending: u8) -> u8 {
+        let bit = pending.trailing_zeros() as u8;
+        self.ime = false;
+        let requested = self.read8(IF_ADDR);
+        self.write8(IF_ADDR, requested & !(1 << bit));
+        self.push16(self.registers.pc);
+        self.registers.pc = 0x0040 + 8 * bit as u16;
+        20
+    }
+
+    // ---- Memory access -------------------------------------------------------------
+
+    /// Reads a byte. Addresses the MMU rejects (echo RAM, the unusable region) read as
+    /// 0xFF rather than crashing the emulator.
+    fn read8(&mut self, addr: u16) -> u8 {
+        self.memory.read(addr).unwrap_or_else(|e| {
+            log::warn!("read {addr:#06X}: {e:?}");
+            0xFF
+        })
+    }
+
+    fn write8(&mut self, addr: u16, value: u8) {
+        if let Err(e) = self.memory.write(addr, value) {
+            log::warn!("write {addr:#06X} <- {value:#04X}: {e:?}");
+        }
+    }
+
+    fn write16(&mut self, addr: u16, value: u16) {
+        let [low, high] = value.to_le_bytes();
+        self.write8(addr, low);
+        self.write8(addr.wrapping_add(1), high);
+    }
+
+    /// Reads the byte at PC and advances PC.
+    fn fetch8(&mut self) -> u8 {
+        let byte = self.read8(self.registers.pc);
+        self.registers.pc = self.registers.pc.wrapping_add(1);
         byte
     }
 
-    /// Executes one instruction (or services one interrupt) and returns the
-    /// number of T-cycles it took (NOP = 4).
-    pub fn step(&mut self) -> u8 {
-        if self.halted {
-            return 0;
-        }
-
-        // Fetch the opcode from memory
-        let opcode = self.read_byte();
-
-        log::debug!("Opcode : {:02X}", opcode);
-        log::debug!("Program counter : {:02X}", self.registers.pc);
-        // Execute the instruction
-        self.execute_instruction(opcode);
-        0 // TODO: return the real cycle count
+    /// Reads the little-endian word at PC and advances PC by 2.
+    fn fetch16(&mut self) -> u16 {
+        let low = self.fetch8();
+        let high = self.fetch8();
+        u16::from_le_bytes([low, high])
     }
 
-    fn get_operand(&mut self, operand: &str, op_im: bool, instr: &Instruction) -> Operand {
-        if operand.contains("16") {
-            let value = self.read_word();
-            if *instr == Instruction::LD && !op_im {
-                Operand::Memory(value)
-            } else {
-                Operand::Immediate16(value)
-            }
-        } else if operand.contains("8") {
-            // get the immediate value
-            let imm = self.read_byte();
-            Operand::Immediate(imm)
-        } else if is_flag(operand, instr) {
-            Operand::Flag(match_string_to_flag(operand))
-        } else {
-            // get the immediate value
-            let op_reg = match_string_to_register(operand);
-            if op_im {
-                Operand::Register(op_reg)
-            } else {
-                let value = self.registers.get_register_value_16(op_reg);
-                Operand::Memory(value)
-            }
+    fn push16(&mut self, value: u16) {
+        self.registers.sp = self.registers.sp.wrapping_sub(2);
+        self.write16(self.registers.sp, value);
+    }
+
+    fn pop16(&mut self) -> u16 {
+        let sp = self.registers.sp;
+        let low = self.read8(sp);
+        let high = self.read8(sp.wrapping_add(1));
+        self.registers.sp = sp.wrapping_add(2);
+        u16::from_le_bytes([low, high])
+    }
+
+    // ---- Register operands ---------------------------------------------------------
+
+    fn a(&self) -> u8 {
+        self.registers.get_register_value_8(RegisterNames::A)
+    }
+
+    fn set_a(&mut self, value: u8) {
+        self.registers.set_register_value_8(RegisterNames::A, value);
+    }
+
+    /// Reads an 8-bit operand by its 3-bit index (see [`R8`]); 6 reads (HL).
+    fn get_r8(&mut self, idx: u8) -> u8 {
+        match idx & 7 {
+            6 => self.read8(self.registers.hl),
+            i => self.registers.get_register_value_8(R8[i as usize]),
         }
     }
 
-    fn execute_instruction(&mut self, op: u8) {
-        // take the hex string of op
-        let op: String = format!("0x{:02X}", op);
-        // print OPCODE
-        let a: JsonValue = self.opcodes["unprefixed"][op].clone();
-
-        // get the instruction from the opcode
-        let instr: Instruction = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
-
-        let operands: &JsonValue = &a["operands"];
-        let mut ops: [Operand; 2] = [Operand::NIL; 2];
-        if operands.len() == 2 {
-            // get the first operand
-            let op1 = &operands[0]["name"].as_str().unwrap();
-            let op1_imm: bool = operands[0]["immediate"].as_bool().unwrap();
-            // get the second operand
-            let op2 = &operands[1]["name"].as_str().unwrap();
-            // get the immediate value
-            let op2_imm: bool = operands[1]["immediate"].as_bool().unwrap();
-
-            // if op1_imm is true, then it is an immediate value
-            // let operand1 = Operand::Register(match_string_to_register(op1));
-            let operand1 = self.get_operand(op1, op1_imm, &instr);
-            // if op2_imm is true, then it is an immediate value
-            let operand2 = self.get_operand(op2, op2_imm, &instr);
-            ops[0] = operand1;
-            ops[1] = operand2;
-        } else if operands.len() == 1 {
-            // get the first operand
-            let op1 = &operands[0]["name"].as_str().unwrap();
-            let op1_imm: bool = operands[0]["immediate"].as_bool().unwrap();
-            // get instruction
-            let instr = match_string_to_instruction((&a["mnemonic"]).as_str().unwrap());
-
-            let operand1 = self.get_operand(op1, op1_imm, &instr);
-            ops[0] = operand1;
+    /// Writes an 8-bit operand by its 3-bit index (see [`R8`]); 6 writes (HL).
+    fn set_r8(&mut self, idx: u8, value: u8) {
+        match idx & 7 {
+            6 => self.write8(self.registers.hl, value),
+            i => self.registers.set_register_value_8(R8[i as usize], value),
         }
+    }
 
-        log::debug!("{:?} {:?},{:?} \n", instr, ops[0], ops[1]);
+    /// 16-bit register pair by its 2-bit index: 0=BC 1=DE 2=HL 3=SP.
+    fn get_rp(&self, idx: u8) -> u16 {
+        match idx & 3 {
+            0 => self.registers.bc,
+            1 => self.registers.de,
+            2 => self.registers.hl,
+            _ => self.registers.sp,
+        }
+    }
 
-        instr.match_instruction(&mut self.registers, &mut self.memory, &ops);
+    fn set_rp(&mut self, idx: u8, value: u16) {
+        match idx & 3 {
+            0 => self.registers.bc = value,
+            1 => self.registers.de = value,
+            2 => self.registers.hl = value,
+            _ => self.registers.sp = value,
+        }
+    }
+
+    /// Register pair for PUSH/POP by its 2-bit index: 0=BC 1=DE 2=HL 3=AF.
+    fn get_rp2(&self, idx: u8) -> u16 {
+        match idx & 3 {
+            3 => self.registers.get_register_value_16(RegisterNames::AF),
+            i => self.get_rp(i),
+        }
+    }
+
+    fn set_rp2(&mut self, idx: u8, value: u16) {
+        match idx & 3 {
+            3 => self
+                .registers
+                .set_register_value_16(RegisterNames::AF, value),
+            i => self.set_rp(i, value),
+        }
+    }
+
+    /// Branch condition by its 2-bit index: 0=NZ 1=Z 2=NC 3=C.
+    fn condition(&self, idx: u8) -> bool {
+        let flag = &self.registers.flag;
+        match idx & 3 {
+            0 => !flag.z,
+            1 => flag.z,
+            2 => !flag.c,
+            _ => flag.c,
+        }
     }
 
     pub fn print_registers(&self) {
-        println!("Register values:");
+        let r = &self.registers;
         println!(
-            "A:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::A)
-        );
-
-        println!(
-            "B:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::B)
-        );
-        println!(
-            "C:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::C)
-        );
-        println!(
-            "D:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::D)
-        );
-        println!(
-            "E:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::E)
-        );
-        println!(
-            "H:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::H)
-        );
-        println!(
-            "L:  0x{:02X}",
-            self.registers.get_register_value_8(RegisterNames::L)
-        );
-        println!(
-            "AF: 0x{:04X}",
-            self.registers.get_register_value_16(RegisterNames::AF)
-        );
-        println!(
-            "BC: 0x{:04X}",
-            self.registers.get_register_value_16(RegisterNames::BC)
-        );
-        println!(
-            "DE: 0x{:04X}",
-            self.registers.get_register_value_16(RegisterNames::DE)
-        );
-        println!(
-            "HL: 0x{:04X}",
-            self.registers.get_register_value_16(RegisterNames::HL)
-        );
-        println!("SP: 0x{:04X}", self.registers.sp);
-        println!("PC: 0x{:04X}", self.registers.pc);
-        println!(
-            "Flags: Z={}, N={}, H={}, C={}",
-            self.registers.flag.get_z(),
-            self.registers.flag.get_n(),
-            self.registers.flag.get_h(),
-            self.registers.flag.get_c()
+            "AF: {:04X}  BC: {:04X}  DE: {:04X}  HL: {:04X}  SP: {:04X}  PC: {:04X}  IME: {}",
+            r.get_register_value_16(RegisterNames::AF),
+            r.bc,
+            r.de,
+            r.hl,
+            r.sp,
+            r.pc,
+            self.ime as u8
         );
     }
 }

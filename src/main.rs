@@ -69,13 +69,11 @@ fn run_emu(rom: Vec<u8>) {
 
         while cycles_this_frame < cycles_per_frame {
             // Execute one CPU instruction
-            cpu.step();
-
-            // Add the cycles for this instruction (for simplicity, using 4 cycles)
-            cycles_this_frame += 4;
+            let cycles = cpu.step();
+            cycles_this_frame += cycles as u32;
 
             // Update the PPU
-            if cpu.memory.update_ppu(4) {
+            if cpu.memory.update_ppu(cycles as u32) {
                 // If a frame is ready, render it
                 cpu.memory.get_ppu_mut().render(&mut canvas);
             }
