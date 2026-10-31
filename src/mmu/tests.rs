@@ -368,3 +368,72 @@ mod interrupts {
         Ok(())
     }
 }
+
+mod joypad {
+    use super::*;
+    use crate::mmu::Button;
+
+    const P1: u16 = 0xFF00;
+
+    #[test]
+    fn nothing_selected_reads_all_released() -> EmuRes<()> {
+        let mut mmu = blank_mmu();
+        mmu.set_button(Button::A, true);
+        mmu.write(P1, 0x30)?;
+        assert_eq!(mmu.read(P1)? & 0x0F, 0x0F);
+        Ok(())
+    }
+
+    #[test]
+    fn dpad_group() -> EmuRes<()> {
+        let mut mmu = blank_mmu();
+        mmu.set_button(Button::Left, true);
+        mmu.set_button(Button::Start, true);
+        mmu.write(P1, 0x20)?; // P14 low: D-pad
+        assert_eq!(mmu.read(P1)? & 0x0F, 0b1101, "Left is bit 1");
+        Ok(())
+    }
+
+    #[test]
+    fn button_group() -> EmuRes<()> {
+        let mut mmu = blank_mmu();
+        mmu.set_button(Button::Left, true);
+        mmu.set_button(Button::Start, true);
+        mmu.write(P1, 0x10)?; // P15 low: action buttons
+        assert_eq!(mmu.read(P1)? & 0x0F, 0b0111, "Start is bit 3");
+        Ok(())
+    }
+
+    #[test]
+    fn release_clears_bit() -> EmuRes<()> {
+        let mut mmu = blank_mmu();
+        mmu.write(P1, 0x10)?;
+        mmu.set_button(Button::B, true);
+        mmu.set_button(Button::B, false);
+        assert_eq!(mmu.read(P1)? & 0x0F, 0x0F);
+        Ok(())
+    }
+
+    #[test]
+    fn press_requests_interrupt_only_when_selected() -> EmuRes<()> {
+        let mut mmu = blank_mmu();
+        mmu.write(0xFF0F, 0)?;
+        mmu.write(P1, 0x20)?; // D-pad selected
+        mmu.set_button(Button::A, true);
+        assert_eq!(mmu.read(0xFF0F)? & 0x10, 0, "A isn't in the selected group");
+        mmu.set_button(Button::Down, true);
+        assert_eq!(mmu.read(0xFF0F)? & 0x10, 0x10);
+        Ok(())
+    }
+
+    #[test]
+    fn mbc1_rom_banking_through_the_bus() -> EmuRes<()> {
+        let mut rom = vec![0u8; 4 * 0x4000];
+        rom[0x0147] = 0x01; // MBC1
+        rom[3 * 0x4000] = 0xAB;
+        let mut mmu = MMU::new(rom);
+        mmu.write(0x2000, 3)?;
+        assert_eq!(mmu.read(0x4000)?, 0xAB);
+        Ok(())
+    }
+}

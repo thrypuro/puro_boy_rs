@@ -1,14 +1,3 @@
-use sdl3::pixels::Color;
-use sdl3::rect::Point;
-use sdl3::render::WindowCanvas;
-
-pub const GAMEBOY_COLORS: [sdl3::pixels::Color; 4] = [
-    Color::RGB(255, 255, 255),
-    Color::RGB(192, 192, 192),
-    Color::RGB(96, 96, 96),
-    Color::RGB(0, 0, 0),
-];
-
 pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
 
@@ -61,12 +50,7 @@ enum Mode {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Tile {
-    pub data: [[u8; 8]; 8],
-}
-#[derive(Debug, PartialEq, Eq)]
 pub struct PPU {
-    pub tiles: Vec<Tile>,
     // Vram to store the pixel
     vram: [u8; VRAM_SIZE],
     // Object Attribute Memory
@@ -99,7 +83,6 @@ pub struct PPU {
 impl PPU {
     pub fn new() -> Self {
         PPU {
-            tiles: Vec::new(),
             vram: [0u8; VRAM_SIZE],
             oam: [0u8; OAM_SIZE],
             lcdc: 0,
@@ -119,14 +102,6 @@ impl PPU {
             stat_line: false,
             framebuffer: [0u8; SCREEN_WIDTH * SCREEN_HEIGHT],
         }
-    }
-
-    pub fn push_tile(&mut self, t: Tile) {
-        self.tiles.push(t);
-    }
-
-    pub fn turn_lcd_on(&mut self) {
-        self.write(0xFF40, self.lcdc | LCDC_LCD_ON);
     }
 
     fn lcd_on(&self) -> bool {
@@ -172,6 +147,8 @@ impl PPU {
                     self.mode = if self.lcd_on() {
                         Mode::OamScan
                     } else {
+                        // A switched-off LCD shows a blank (white) screen
+                        self.framebuffer.fill(0);
                         Mode::HBlank
                     };
                 }
@@ -250,19 +227,6 @@ impl PPU {
     /// 160x144 shades (0 = white .. 3 = black) after palettes are applied, row-major.
     pub fn framebuffer(&self) -> &[u8] {
         &self.framebuffer
-    }
-
-    pub fn render(&self, canvas: &mut WindowCanvas) {
-        for (index, &shade) in self.framebuffer.iter().enumerate() {
-            canvas.set_draw_color(GAMEBOY_COLORS[shade as usize]);
-            canvas
-                .draw_point(Point::new(
-                    (index % SCREEN_WIDTH) as i32,
-                    (index / SCREEN_WIDTH) as i32,
-                ))
-                .expect("Failed to draw framebuffer");
-        }
-        canvas.present();
     }
 
     /// Colour index (0-3) of pixel (x, y) in the tile at `tile_addr`.
@@ -393,25 +357,6 @@ fn apply_palette(palette: u8, colour: u8) -> u8 {
     (palette >> (colour * 2)) & 0b11
 }
 
-pub fn render_tile(tile: [[u8; 8]; 8], canvas: &mut WindowCanvas, position: Point) {
-    // Draw the 8x8 tile
-    for y in 0..8u32 {
-        for x in 0..8u32 {
-            let ci = tile[y as usize][x as usize];
-            let c_col = GAMEBOY_COLORS[ci as usize];
-            canvas.set_draw_color(c_col);
-            let p = Point::new(
-                x as i32, // Center the tile
-                y as i32,
-            ) + position;
-            canvas.draw_point(p).expect("Failed to draw point");
-        }
-    }
-
-    // Present the canvas once per frame
-    // canvas.present();
-}
-
 pub fn get_pixelrow(b1: u8, b2: u8) -> [u8; 8] {
     let mut c1: [u8; 8] = [0; 8];
     for i in 0..8 {
@@ -429,20 +374,8 @@ pub fn get_tile(t1: &[u8]) -> [[u8; 8]; 8] {
         cs[i / 2] = get_pixelrow(t1[i], t1[i + 1]);
         i += 2;
     }
-    println!("cs {:?}", cs);
     cs
 }
-
-// pub fn loadtileset(rom: &Vec<u8>) -> ppu {
-//     let mut tileset = ppu::new();
-//     for i in (0..(384)).step_by(16) {
-//         let t = tile {
-//             data: get_tile(&rom[i..i + 16]),
-//         };
-//         tileset.push_tile(t);
-//     }
-//     tileset
-// }
 
 #[cfg(test)]
 mod tests;

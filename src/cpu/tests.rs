@@ -1289,3 +1289,61 @@ mod blargg {
         run_rom("instr_timing/instr_timing.gb");
     }
 }
+
+/// Mooneye's ROMs execute `LD B,B` when done and signal a pass by leaving the Fibonacci
+/// numbers 3, 5, 8, 13, 21, 34 in B, C, D, E, H, L.
+/// Run with `cargo test --release mooneye -- --ignored`.
+mod mooneye {
+    use super::*;
+
+    const ROM_DIR: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/test_roms/game-boy-test-roms-v7.0/mooneye-test-suite"
+    );
+
+    fn run_rom(path: &str) {
+        let full = format!("{ROM_DIR}/{path}");
+        let rom = std::fs::read(&full).unwrap_or_else(|e| panic!("can't read {full}: {e}"));
+        let mut mmu = MMU::new(rom);
+        let mut cpu = CPU::new(&mut mmu);
+        let mut elapsed: u64 = 0;
+        while elapsed < 30 * 4_194_304 {
+            if read(&cpu, cpu.registers.pc) == 0x40 {
+                let regs = [B, C, D, E, H, L].map(|r| get(&cpu, r));
+                assert_eq!(regs, [3, 5, 8, 13, 21, 34], "{path}: B C D E H L");
+                return;
+            }
+            let cycles = cpu.step();
+            cpu.memory.tick(cycles);
+            elapsed += cycles as u64;
+        }
+        panic!("{path}: timed out without reaching LD B,B");
+    }
+
+    macro_rules! mbc1 {
+        ($($name:ident => $file:literal),* $(,)?) => {
+            $(
+                #[test]
+                #[ignore]
+                fn $name() {
+                    run_rom(concat!("emulator-only/mbc1/", $file));
+                }
+            )*
+        };
+    }
+
+    mbc1! {
+        mbc1_bits_bank1 => "bits_bank1.gb",
+        mbc1_bits_bank2 => "bits_bank2.gb",
+        mbc1_bits_mode => "bits_mode.gb",
+        mbc1_bits_ramg => "bits_ramg.gb",
+        mbc1_ram_64kb => "ram_64kb.gb",
+        mbc1_ram_256kb => "ram_256kb.gb",
+        mbc1_rom_512kb => "rom_512kb.gb",
+        mbc1_rom_1mb => "rom_1Mb.gb",
+        mbc1_rom_2mb => "rom_2Mb.gb",
+        mbc1_rom_4mb => "rom_4Mb.gb",
+        mbc1_rom_8mb => "rom_8Mb.gb",
+        mbc1_rom_16mb => "rom_16Mb.gb",
+    }
+}

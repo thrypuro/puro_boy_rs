@@ -1,6 +1,22 @@
 // IF bits requested by the IO registers
 pub const INT_TIMER: u8 = 1 << 2;
 pub const INT_SERIAL: u8 = 1 << 3;
+pub const INT_JOYPAD: u8 = 1 << 4;
+
+/// A Game Boy button. The discriminant is its bit in the joypad state: the low nibble
+/// is the D-pad (read when P14, bit 4, is low), the high nibble the action buttons
+/// (read when P15, bit 5, is low).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button {
+    Right = 1 << 0,
+    Left = 1 << 1,
+    Up = 1 << 2,
+    Down = 1 << 3,
+    A = 1 << 4,
+    B = 1 << 5,
+    Select = 1 << 6,
+    Start = 1 << 7,
+}
 
 const IO_START: usize = 0xFF00;
 const IO_SIZE: usize = (0xFF7F - 0xFF00) + 1;
@@ -11,8 +27,10 @@ const TIMA_RELOAD_DELAY: u8 = 4;
 /// Everything in 0xFF00-0xFF7F except the LCD registers (PPU) and DMA (MMU).
 #[derive(Debug, PartialEq, Eq)]
 pub struct IOReg {
-    // Joypad select bits (4-5) of 0xFF00. No buttons are wired up yet.
+    // Joypad select bits (4-5) of 0xFF00
     pub joypad: u8,
+    // Pressed buttons, one bit per `Button`
+    buttons: u8,
     // Serial data (0xFF01) and control (0xFF02)
     sb: u8,
     sc: u8,
@@ -34,6 +52,7 @@ impl IOReg {
     pub fn new() -> Self {
         IOReg {
             joypad: 0x30,
+            buttons: 0,
             sb: 0,
             sc: 0,
             serial_out: String::new(),
@@ -53,8 +72,7 @@ impl IOReg {
 
     pub fn read(&self, address: usize) -> u8 {
         match address {
-            // Nothing pressed: the low nibble reads 1s
-            0xFF00 => 0xC0 | (self.joypad & 0x30) | 0x0F,
+            0xFF00 => 0xC0 | (self.joypad & 0x30) | self.joypad_lines(),
             0xFF01 => self.sb,
             0xFF02 => self.sc | 0x7E,
             0xFF04 => (self.sys_counter >> 8) as u8,
@@ -68,7 +86,11 @@ impl IOReg {
 
     pub fn write(&mut self, address: usize, value: u8) {
         match address {
-            0xFF00 => self.joypad = value & 0x30,
+            0xFF00 => {
+                let before = self.joypad_lines();
+                self.joypad = value & 0x30;
+                self.check_joypad_interrupt(before);
+            }
             0xFF01 => self.sb = value,
             0xFF02 => {
                 self.sc = value & 0x81;
@@ -94,6 +116,35 @@ impl IOReg {
             }
             0xFF0F => self.if_reg = value & 0x1F,
             _ => self.other[address - IO_START] = value,
+        }
+    }
+
+    pub fn set_button(&mut self, button: Button, pressed: bool) {
+        let before = self.joypad_lines();
+        if pressed {
+            self.buttons |= button as u8;
+        } else {
+            self.buttons &= !(button as u8);
+        }
+        self.check_joypad_interrupt(before);
+    }
+
+    /// The low nibble of 0xFF00: input lines for the selected groups, 0 = pressed.
+    fn joypad_lines(&self) -> u8 {
+        let mut pressed = 0;
+        if self.joypad & 0x10 == 0 {
+            pressed |= self.buttons & 0x0F;
+        }
+        if self.joypad & 0x20 == 0 {
+            pressed |= self.buttons >> 4;
+        }
+        !pressed & 0x0F
+    }
+
+    /// The joypad interrupt fires when any input line goes from high to low.
+    fn check_joypad_interrupt(&mut self, before: u8) {
+        if before & !self.joypad_lines() != 0 {
+            self.if_reg |= INT_JOYPAD;
         }
     }
 

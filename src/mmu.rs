@@ -1,24 +1,23 @@
+mod cartridge;
 mod ioreg;
 mod ppu;
 
 use crate::error::{EmuError, EmuRes};
+pub use cartridge::Cartridge;
+pub use ioreg::Button;
 use ioreg::IOReg;
 use ppu::PPU;
 
-const ROM_SIZE: usize = 0x8000;
-const EXTRAM_SIZE: usize = (0xBFFF - 0xA000) + 1;
 const WRAM_SIZE: usize = (0xDFFF - 0xC000) + 1;
 const HRAM_SIZE: usize = (0xFFFE - 0xFF80) + 1;
 
 // Memory Map
 #[derive(Debug, PartialEq, Eq)]
 pub struct MMU {
-    // ROM (0,0x7fff) represented a vec, but usually 0x800
-    rom: [u8; ROM_SIZE],
+    // ROM (0x0000-0x7FFF) and external RAM (0xA000-0xBFFF), banked by the MBC
+    cartridge: Cartridge,
     // contains VRAM, tiles and tileset (0x8000 , 0x9fff)
     ppu: PPU,
-    // External ram (from Cart) (0xA000 ,0xBFFF)
-    ext_ram: [u8; EXTRAM_SIZE],
     // Work ram WRAM(0xC000,0xDFFF)
     wram: [u8; WRAM_SIZE],
     // Echo ram (0xE000,0xFDFF) is treated as prohibited
@@ -33,18 +32,12 @@ pub struct MMU {
     ie: u8,
 }
 
-fn to_array<T: Default, const N: usize>(v: Vec<T>) -> [T; N] {
-    let mut it = v.into_iter();
-    std::array::from_fn(|_| it.next().unwrap_or_default())
-}
-
 impl MMU {
     /// Builds the memory map from a ROM image. ROMs smaller than 32KB are padded with 0.
     pub fn new(rom: Vec<u8>) -> MMU {
         MMU {
-            rom: to_array(rom),
+            cartridge: Cartridge::new(rom),
             ppu: PPU::new(),
-            ext_ram: [0u8; EXTRAM_SIZE],
             wram: [0u8; WRAM_SIZE],
             ioreg: IOReg::new(),
             dma: 0,
@@ -74,8 +67,21 @@ impl MMU {
         frame_ready
     }
 
-    pub fn get_ppu_mut(&mut self) -> &mut PPU {
-        &mut self.ppu
+    pub fn ppu(&self) -> &PPU {
+        &self.ppu
+    }
+
+    pub fn cartridge(&self) -> &Cartridge {
+        &self.cartridge
+    }
+
+    pub fn cartridge_mut(&mut self) -> &mut Cartridge {
+        &mut self.cartridge
+    }
+
+    /// Updates a joypad button, requesting the joypad interrupt on a new press.
+    pub fn set_button(&mut self, button: Button, pressed: bool) {
+        self.ioreg.set_button(button, pressed);
     }
 
     /// Every byte sent over the serial port so far (Blargg test ROMs print here).
@@ -87,9 +93,9 @@ impl MMU {
     pub fn read(&self, address: u16) -> EmuRes<u8> {
         let addr = address as usize;
         match address {
-            0x0000..=0x7FFF => Ok(self.rom[addr]),
+            0x0000..=0x7FFF => Ok(self.cartridge.read_rom(address)),
             0x8000..=0x9FFF => Ok(self.ppu.read(addr)), // PPU need to implement
-            0xA000..=0xBFFF => Ok(self.ext_ram[addr - 0xA000]),
+            0xA000..=0xBFFF => Ok(self.cartridge.read_ram(address)),
             0xC000..=0xDFFF => Ok(self.wram[addr - 0xC000]),
             0xFE00..=0xFE9F => Ok(self.ppu.read(addr)),
             0xFF46 => Ok(self.dma),
@@ -106,10 +112,10 @@ impl MMU {
         // println!("ram is {}", self.ram[address as usize]);
         let addr = address as usize;
         match address {
-            0x0000..=0x7FFF => {} // Rom is immutable
+            0x0000..=0x7FFF => self.cartridge.write_rom(address, value), // MBC registers
             0x8000..=0x9FFF => self.ppu.write(addr, value),
 
-            0xA000..=0xBFFF => self.ext_ram[addr - 0xA000] = value,
+            0xA000..=0xBFFF => self.cartridge.write_ram(address, value),
             0xC000..=0xDFFF => self.wram[addr - 0xC000] = value,
 
             0xFE00..=0xFE9F => self.ppu.write(addr, value),
