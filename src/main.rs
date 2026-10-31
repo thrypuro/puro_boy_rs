@@ -1,4 +1,5 @@
 mod cpu;
+mod error;
 mod mmu;
 
 use cpu::CPU;
@@ -42,8 +43,7 @@ fn run_emu(rom: Vec<u8>) {
     let mut cpu = CPU::new(&mut mmu);
 
     // Enable the LCD
-    // mmu.get_ppu_mut().turn_lcd_on();
-    cpu.memory.ppu.turn_lcd_on();
+    cpu.memory.get_ppu_mut().turn_lcd_on();
 
     // Main emulation loop
     'running: loop {
@@ -65,6 +65,7 @@ fn run_emu(rom: Vec<u8>) {
         // A single frame is ~70,000 cycles at 4MHz
         let cycles_per_frame = 70000;
         let mut cycles_this_frame = 0;
+        canvas.clear();
 
         while cycles_this_frame < cycles_per_frame {
             // Execute one CPU instruction
@@ -79,8 +80,6 @@ fn run_emu(rom: Vec<u8>) {
                 cpu.memory.get_ppu_mut().render(&mut canvas);
             }
         }
-
-        canvas.clear();
 
         // Limit to ~60 FPS
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

@@ -1,188 +1,161 @@
-mod bank;
+mod ioreg;
 mod ppu;
-mod shared;
 
+use crate::error::{EmuError, EmuRes};
+use ioreg::IOReg;
 use ppu::PPU;
 
-const ROM_BANK_SIZE: usize = 0x4000;
-const VRAM_SIZE: usize = 0x2000;
-const EXTERNAL_RAM_SIZE: usize = 0x2000;
-const WRAM_SIZE: usize = 0x2000;
-const ECHO_RAM_SIZE: usize = 0x1E00;
-const OAM_SIZE: usize = 0xA0;
-const IO_REGISTERS_SIZE: usize = 0x80;
-const HRAM_SIZE: usize = 0x7F;
+const ROM_SIZE: usize = 0x8000;
+const EXTRAM_SIZE: usize = (0xBFFF - 0xA000) + 1;
+const WRAM_SIZE: usize = (0xDFFF - 0xC000) + 1;
+const HRAM_SIZE: usize = (0xFFFE - 0xFF80) + 1;
 
+// Memory Map
 #[derive(Debug, PartialEq, Eq)]
 pub struct MMU {
-    // Memory Map
-    // ROM Bank 0 (0x0000-0x3FFF)
-    rom_bank0: [u8; ROM_BANK_SIZE],
-    // ROM Bank 1-n (0x4000-0x7FFF)
-    rom_bank1: [u8; ROM_BANK_SIZE],
-
-    // External RAM (0xA000-0xBFFF)
-    ext_ram: [u8; EXTERNAL_RAM_SIZE],
-    // Work RAM (0xC000-0xDFFF)
+    // ROM (0,0x7fff) represented a vec, but usually 0x800
+    rom: [u8; ROM_SIZE],
+    // contains VRAM, tiles and tileset (0x8000 , 0x9fff)
+    ppu: PPU,
+    // External ram (from Cart) (0xA000 ,0xBFFF)
+    ext_ram: [u8; EXTRAM_SIZE],
+    // Work ram WRAM(0xC000,0xDFFF)
     wram: [u8; WRAM_SIZE],
-    // Echo RAM - mirror of WRAM (0xE000-0xFDFF)
-    eram: [u8; ECHO_RAM_SIZE],
-    // OAM - Sprite Attribute Table (0xFE00-0xFE9F)
-    oam: [u8; OAM_SIZE],
+    // Echo ram (0xE000,0xFDFF) is treated as prohibited
 
-    // High RAM (0xFF80-0xFFFE)
+    // IO Registers (LCD registers live in the PPU)
+    ioreg: IOReg,
+    // Last value written to the OAM DMA register (0xFF46)
+    dma: u8,
+    // High Ram
     hram: [u8; HRAM_SIZE],
-    // Interrupt Enable Register (0xFFFF)
-    ie_register: u8,
-    // I/O Registers (0xFF00-0xFF7F) Putting this in the PPU
+    // Interrupts Enable Register
+    ie: u8,
+}
 
-    // PPU
-    pub ppu: PPU,
+fn to_array<T: Default, const N: usize>(v: Vec<T>) -> [T; N] {
+    let mut it = v.into_iter();
+    std::array::from_fn(|_| it.next().unwrap_or_default())
 }
 
 impl MMU {
+    /// Builds the memory map from a ROM image. ROMs smaller than 32KB are padded with 0.
     pub fn new(rom: Vec<u8>) -> MMU {
-        let mut rom_bank0 = [0; ROM_BANK_SIZE];
-        let mut rom_bank1 = [0; ROM_BANK_SIZE];
-
-        // Copy ROM data to ROM banks
-        for i in 0..ROM_BANK_SIZE {
-            if i < rom.len() {
-                rom_bank0[i] = rom[i];
-            }
-        }
-
-        for i in 0..ROM_BANK_SIZE {
-            let index = i + ROM_BANK_SIZE;
-            if index < rom.len() {
-                rom_bank1[i] = rom[index];
-            }
-        }
-
-        let mut mmu = MMU {
-            rom_bank0,
-            rom_bank1,
-
-            ext_ram: [0; EXTERNAL_RAM_SIZE],
-            wram: [0; WRAM_SIZE],
-            eram: [0; ECHO_RAM_SIZE],
-            oam: [0; OAM_SIZE],
-            hram: [0; HRAM_SIZE],
-            ie_register: 0,
+        MMU {
+            rom: to_array(rom),
             ppu: PPU::new(),
-        };
-
-        // Initialize PPU with tile data from ROM if it exists
-        mmu.init_ppu();
-
-        mmu
-    }
-
-    /// Initialize PPU with tile data from ROM
-    fn init_ppu(&mut self) {
-        // Pass relevant tile data to PPU
-        self.ppu.init(&self.rom_bank0, &self.rom_bank1);
-    }
-
-    /// Reads a byte from memory at the specified address.
-    pub fn read(&self, address: u16) -> u8 {
-        match address {
-            0x0000..=0x3FFF => self.rom_bank0[address as usize],
-            0x4000..=0x7FFF => self.rom_bank1[(address - 0x4000) as usize],
-            0x8000..=0x9FFF => {
-                let vram_addr = (address - 0x8000) as usize;
-                self.ppu.vram[vram_addr]
-            }
-            0xA000..=0xBFFF => self.ext_ram[(address - 0xA000) as usize],
-            0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
-            0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize], // Echo RAM, mirrors WRAM
-            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize],
-            0xFEA0..=0xFEFF => 0, // Unusable memory
-            0xFF00..=0xFF7F => 0, // self.io_registers[(address - 0xFF00) as usize],
-            0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
-            0xFFFF => self.ie_register,
+            ext_ram: [0u8; EXTRAM_SIZE],
+            wram: [0u8; WRAM_SIZE],
+            ioreg: IOReg::new(),
+            dma: 0,
+            hram: [0u8; HRAM_SIZE],
+            ie: 0,
         }
     }
+    /// Advances every clocked component (PPU, timer) by `cycles` T-cycles and
+    /// ORs any interrupts they request into IF (0xFF0F).
+    pub fn tick(&mut self, cycles: u8) {
+        let requested = self.ppu.tick(cycles);
+        self.ioreg.if_reg |= requested;
+        self.ioreg.tick(cycles);
+    }
 
-    /// Writes a byte to memory at the specified address.
-    pub fn write(&mut self, address: u16, value: u8) {
-        match address {
-            0x0000..=0x7FFF => {
-                // ROM is read-only, but some games use writes to this region for memory bank switching
-                // For now, we ignore these writes
-            }
-            0x8000..=0x9FFF => {
-                let vram_addr = (address - 0x8000) as usize;
-                self.ppu.vram[vram_addr] = value;
-                // Update tile data in PPU if VRAM is written to
-                if address >= 0x8000 && address < 0x9800 {
-                    self.ppu.update_tile(address, value);
-                }
-            }
-            0xA000..=0xBFFF => self.ext_ram[(address - 0xA000) as usize] = value,
-            0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize] = value,
-            0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize] = value, // Echo RAM, mirrors WRAM
-            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = value,
-            0xFEA0..=0xFEFF => {} // Unusable memory, ignore writes
-            0xFF00..=0xFF7F => {
-                // self.io_registers[(address - 0xFF00) as usize] = value;
-                // // Special handling for specific I/O registers
-                // match address {
-                //     0xFF40 => self.ppu.update_lcd_control(value),
-                //     0xFF41 => self.ppu.update_lcd_status(value),
-                //     0xFF42 => self.ppu.set_scroll_y(value),
-                //     0xFF43 => self.ppu.set_scroll_x(value),
-                //     0xFF44 => {} // LY - read only
-                //     0xFF45 => self.ppu.set_ly_compare(value),
-                //     0xFF47 => self.ppu.set_bg_palette(value),
-                //     0xFF48 => self.ppu.set_obj_palette0(value),
-                //     0xFF49 => self.ppu.set_obj_palette1(value),
-                //     0xFF4A => self.ppu.set_window_y(value),
-                //     0xFF4B => self.ppu.set_window_x(value),
-                //     _ => {}
-                // }
-            }
-            0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
-            0xFFFF => self.ie_register = value,
+    /// Advances the PPU and timer by `cycles` T-cycles, returning whether VBlank began.
+    pub fn update_ppu(&mut self, mut cycles: u32) -> bool {
+        let mut frame_ready = false;
+        while cycles > 0 {
+            let chunk = cycles.min(u8::MAX as u32) as u8;
+            let requested = self.ppu.tick(chunk);
+            self.ioreg.if_reg |= requested;
+            self.ioreg.tick(chunk);
+            frame_ready |= requested & 1 != 0;
+            cycles -= chunk as u32;
         }
+        frame_ready
     }
 
-    /// Reads a word (2 bytes) from memory at the specified address.
-    pub fn read_word(&self, address: u16) -> u16 {
-        let low = self.read(address);
-        let high = self.read(address + 1);
-        ((high as u16) << 8) | (low as u16)
-    }
-
-    /// Writes a word (2 bytes) to memory at the specified address.
-    pub fn write_word(&mut self, address: u16, value: u16) {
-        self.write(address, (value & 0x00FF) as u8);
-        self.write(address + 1, ((value >> 8) & 0x00FF) as u8);
-    }
-
-    /// Reads a byte from the ROM at the specified address.
-    pub fn read_rom(&self, address: u16) -> u8 {
-        if address < 0x4000 {
-            self.rom_bank0[address as usize]
-        } else if address < 0x8000 {
-            self.rom_bank1[(address - 0x4000) as usize]
-        } else {
-            0 // Invalid ROM address
-        }
-    }
-
-    /// Get a reference to the PPU for rendering
-    pub fn get_ppu(&self) -> &PPU {
-        &self.ppu
-    }
-
-    /// Get a mutable reference to the PPU for rendering
     pub fn get_ppu_mut(&mut self) -> &mut PPU {
         &mut self.ppu
     }
 
-    /// Update the PPU for one cycle
-    pub fn update_ppu(&mut self, cycles: u32) -> bool {
-        self.ppu.update(cycles)
+    /// Every byte sent over the serial port so far (Blargg test ROMs print here).
+    pub fn serial_output(&self) -> &str {
+        self.ioreg.serial_output()
+    }
+
+    /// Reads a byte from the RAM at the specified address.
+    pub fn read(&self, address: u16) -> EmuRes<u8> {
+        let addr = address as usize;
+        match address {
+            0x0000..=0x7FFF => Ok(self.rom[addr]),
+            0x8000..=0x9FFF => Ok(self.ppu.read(addr)), // PPU need to implement
+            0xA000..=0xBFFF => Ok(self.ext_ram[addr - 0xA000]),
+            0xC000..=0xDFFF => Ok(self.wram[addr - 0xC000]),
+            0xFE00..=0xFE9F => Ok(self.ppu.read(addr)),
+            0xFF46 => Ok(self.dma),
+            0xFF40..=0xFF4B => Ok(self.ppu.read(addr)),
+            0xFF00..=0xFF7F => Ok(self.ioreg.read(addr)),
+            0xFF80..=0xFFFE => Ok(self.hram[addr - 0xFF80]),
+            0xFFFF => Ok(self.ie),
+            _ => Err(EmuError::ProhibitedRead),
+        }
+    }
+    /// Writes a byte to the RAM at the specified address.
+    pub fn write(&mut self, address: u16, value: u8) -> EmuRes<()> {
+        // self.ram[(address) as usize] = value;
+        // println!("ram is {}", self.ram[address as usize]);
+        let addr = address as usize;
+        match address {
+            0x0000..=0x7FFF => {} // Rom is immutable
+            0x8000..=0x9FFF => self.ppu.write(addr, value),
+
+            0xA000..=0xBFFF => self.ext_ram[addr - 0xA000] = value,
+            0xC000..=0xDFFF => self.wram[addr - 0xC000] = value,
+
+            0xFE00..=0xFE9F => self.ppu.write(addr, value),
+            0xFF46 => self.oam_dma(value)?,
+            0xFF40..=0xFF4B => self.ppu.write(addr, value),
+            0xFF00..=0xFF7F => self.ioreg.write(addr, value),
+            0xFF80..=0xFFFE => self.hram[addr - 0xFF80] = value,
+            0xFFFF => self.ie = value,
+            _ => return Err(EmuError::ProhibitedWrite),
+        }
+        Ok(())
+    }
+    /// Reads a byte from the RAM at the specified address.
+    pub fn read_word(&self, address: u16) -> EmuRes<u16> {
+        let low = self
+            .read(address)
+            .map_err(|_| EmuError::ProhibitedReadWord)?;
+        let high = address
+            .checked_add(1)
+            .and_then(|next| self.read(next).ok())
+            .ok_or(EmuError::ProhibitedReadWord)?;
+        Ok(u16::from_le_bytes([low, high]))
+    }
+    /// Writes a word (2 bytes) to the RAM at the specified address.
+    pub fn write_word(&mut self, address: u16, value: u16) -> EmuRes<()> {
+        let [low, high] = value.to_le_bytes();
+        self.write(address, low)
+            .map_err(|_| EmuError::ProhibitedWriteWord)?;
+        let next = address
+            .checked_add(1)
+            .ok_or(EmuError::ProhibitedWriteWord)?;
+        self.write(next, high)
+            .map_err(|_| EmuError::ProhibitedWriteWord)
+    }
+    /// Copies 160 bytes from `page << 8` into OAM. Real DMA takes 640 cycles;
+    /// this does it instantly.
+    fn oam_dma(&mut self, page: u8) -> EmuRes<()> {
+        self.dma = page;
+        let source = (page as u16) << 8;
+        for i in 0..0xA0u16 {
+            let value = self.read(source + i)?;
+            self.ppu.write(0xFE00 + i as usize, value);
+        }
+        Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;
