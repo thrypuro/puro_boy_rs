@@ -59,6 +59,25 @@ impl MMU {
         self.ioreg.if_reg |= requested;
         self.ioreg.tick(cycles);
     }
+
+    /// Advances the PPU and timer by `cycles` T-cycles, returning whether VBlank began.
+    pub fn update_ppu(&mut self, mut cycles: u32) -> bool {
+        let mut frame_ready = false;
+        while cycles > 0 {
+            let chunk = cycles.min(u8::MAX as u32) as u8;
+            let requested = self.ppu.tick(chunk);
+            self.ioreg.if_reg |= requested;
+            self.ioreg.tick(chunk);
+            frame_ready |= requested & 1 != 0;
+            cycles -= chunk as u32;
+        }
+        frame_ready
+    }
+
+    pub fn get_ppu_mut(&mut self) -> &mut PPU {
+        &mut self.ppu
+    }
+
     /// Every byte sent over the serial port so far (Blargg test ROMs print here).
     pub fn serial_output(&self) -> &str {
         self.ioreg.serial_output()

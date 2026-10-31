@@ -252,6 +252,19 @@ impl PPU {
         &self.framebuffer
     }
 
+    pub fn render(&self, canvas: &mut WindowCanvas) {
+        for (index, &shade) in self.framebuffer.iter().enumerate() {
+            canvas.set_draw_color(GAMEBOY_COLORS[shade as usize]);
+            canvas
+                .draw_point(Point::new(
+                    (index % SCREEN_WIDTH) as i32,
+                    (index / SCREEN_WIDTH) as i32,
+                ))
+                .expect("Failed to draw framebuffer");
+        }
+        canvas.present();
+    }
+
     /// Colour index (0-3) of pixel (x, y) in the tile at `tile_addr`.
     fn tile_pixel(&self, tile_addr: usize, x: u8, y: u8) -> u8 {
         let row = tile_addr - VRAM_START + y as usize * 2;
@@ -282,7 +295,11 @@ impl PPU {
         let mut bg_colours = [0u8; SCREEN_WIDTH];
 
         if self.lcdc & LCDC_BG_ON != 0 {
-            let bg_map = if self.lcdc & LCDC_BG_MAP != 0 { 0x9C00 } else { 0x9800 };
+            let bg_map = if self.lcdc & LCDC_BG_MAP != 0 {
+                0x9C00
+            } else {
+                0x9800
+            };
             let y = ly.wrapping_add(self.scy);
             for (x, colour) in bg_colours.iter_mut().enumerate() {
                 *colour = self.map_pixel(bg_map, (x as u8).wrapping_add(self.scx), y);
@@ -290,7 +307,11 @@ impl PPU {
 
             let window_x = self.wx as i16 - 7;
             if self.lcdc & LCDC_WIN_ON != 0 && ly >= self.wy && window_x < SCREEN_WIDTH as i16 {
-                let win_map = if self.lcdc & LCDC_WIN_MAP != 0 { 0x9C00 } else { 0x9800 };
+                let win_map = if self.lcdc & LCDC_WIN_MAP != 0 {
+                    0x9C00
+                } else {
+                    0x9800
+                };
                 for x in window_x.max(0)..SCREEN_WIDTH as i16 {
                     bg_colours[x as usize] =
                         self.map_pixel(win_map, (x - window_x) as u8, self.window_line);
@@ -311,7 +332,11 @@ impl PPU {
 
     fn render_sprites(&mut self, bg_colours: &[u8; SCREEN_WIDTH]) {
         let ly = self.ly as i16;
-        let height: i16 = if self.lcdc & LCDC_OBJ_TALL != 0 { 16 } else { 8 };
+        let height: i16 = if self.lcdc & LCDC_OBJ_TALL != 0 {
+            16
+        } else {
+            8
+        };
 
         // OAM scan: the first 10 sprites in OAM order that cover this line
         let mut sprites: Vec<usize> = (0..40)
@@ -351,7 +376,11 @@ impl PPU {
                     continue; // transparent, let a lower priority sprite show
                 }
                 if flags & OBJ_BEHIND_BG == 0 || bg_colours[x as usize] == 0 {
-                    let palette = if flags & OBJ_PALETTE_1 != 0 { self.obp1 } else { self.obp0 };
+                    let palette = if flags & OBJ_PALETTE_1 != 0 {
+                        self.obp1
+                    } else {
+                        self.obp0
+                    };
                     self.framebuffer[row + x as usize] = apply_palette(palette, colour);
                 }
                 break;
